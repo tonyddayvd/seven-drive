@@ -9,6 +9,15 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(clients.claim());
 });
 
+self.addEventListener("fetch", (event) => {
+  // Pass-through padrão necessário para o Chrome considerar a aplicação instalável como PWA
+  event.respondWith(
+    fetch(event.request).catch(() => {
+      return caches.match(event.request);
+    })
+  );
+});
+
 self.addEventListener("push", function (event) {
   if (event.data) {
     const data = event.data.json();

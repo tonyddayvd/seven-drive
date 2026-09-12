@@ -55,14 +55,23 @@ export function PwaInstallPrompt() {
     };
   }, []);
 
+  const [showInstructionsModal, setShowInstructionsModal] = useState(false);
+
   const handleInstallClick = async () => {
     if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === "accepted") {
-        setShowPrompt(false);
+      try {
+        await deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice;
+        if (choice.outcome === "accepted") {
+          setShowPrompt(false);
+        }
+      } catch (err) {
+        console.log("Erro no prompt PWA:", err);
+        setShowInstructionsModal(true);
       }
-      setDeferredPrompt(null);
+    } else {
+      // Se o navegador não disparou o evento nativo (ex: Chrome no Android ou navegador interno), abre o passo a passo direto
+      setShowInstructionsModal(true);
     }
   };
 
@@ -71,7 +80,7 @@ export function PwaInstallPrompt() {
     localStorage.setItem("sevendrive_pwa_dismissed", Date.now().toString());
   };
 
-  if (isStandalone || !showPrompt) return null;
+  if (isStandalone || (!showPrompt && !showInstructionsModal)) return null;
 
   return (
     <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md z-50 animate-fade-in">
@@ -110,8 +119,50 @@ export function PwaInstallPrompt() {
           </button>
         </div>
 
+        {/* Se o navegador exigir adição manual pelo menu (três pontinhos), exibe o modal explicativo */}
+        {showInstructionsModal && (
+          <div className="p-4 bg-zinc-950 rounded-2xl border border-blue-500/60 text-xs text-zinc-300 space-y-3 animate-fade-in">
+            <div className="flex items-center gap-2 text-blue-400 font-bold">
+              <Smartphone className="w-4 h-4" />
+              <span>Como fixar o atalho no seu celular:</span>
+            </div>
+            <p className="text-[11px] text-zinc-400">
+              O seu navegador requer que você confirme a adição pelo menu:
+            </p>
+            <div className="space-y-2 text-[11px] pl-1">
+              <div className="flex items-start gap-2">
+                <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center shrink-0 text-[10px]">
+                  1
+                </span>
+                <span>Toque no menu do navegador (os <strong>3 pontinhos</strong> ⋮ no canto superior direito do Chrome).</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center shrink-0 text-[10px]">
+                  2
+                </span>
+                <span>Toque em <strong>"Instalar aplicativo"</strong> ou <strong>"Adicionar à tela inicial"</strong>.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="w-5 h-5 rounded-full bg-emerald-600 text-white font-bold flex items-center justify-center shrink-0 text-[10px]">
+                  3
+                </span>
+                <span>Confirme em <strong>"Instalar"</strong>. O ícone oficial do Seven Drive surgirá imediatamente na sua tela inicial!</span>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setShowInstructionsModal(false);
+                setShowPrompt(false);
+              }}
+              className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition"
+            >
+              Entendi, vou fazer isso!
+            </button>
+          </div>
+        )}
+
         {/* Instruções para iOS (iPhone) ou Botão de 1 Clique no Android/Chrome */}
-        {isIos ? (
+        {!showInstructionsModal && isIos && (
           <div className="p-3 bg-zinc-950/80 rounded-2xl border border-zinc-800 text-[11px] text-zinc-300 space-y-2">
             <p className="font-semibold text-blue-300 flex items-center gap-1.5">
               <Smartphone className="w-3.5 h-3.5" />
@@ -133,7 +184,9 @@ export function PwaInstallPrompt() {
               </li>
             </ol>
           </div>
-        ) : (
+        )}
+
+        {!showInstructionsModal && !isIos && (
           <div className="flex items-center gap-2 pt-1">
             <button
               onClick={handleInstallClick}
