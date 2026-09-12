@@ -135,7 +135,7 @@ const SevenDriveContext = createContext<SevenDriveContextType | undefined>(undef
 
 export function SevenDriveProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<Profile>(initialProfiles[0]);
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(true);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(false);
   const [adminPassword, setAdminPasswordState] = useState<string>("admin123");
 
   const [profiles, setProfiles] = useState<Profile[]>(initialProfiles);
@@ -186,6 +186,16 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
           setVehicles(cloudVehicles || []);
           if (cloudProfiles && cloudProfiles.length > 0) {
             setProfiles(cloudProfiles);
+            const adminProf = cloudProfiles.find((p: any) => p.role === "admin");
+            if (adminProf?.contato_emergencia?.startsWith("pwd:")) {
+              const remotePass = adminProf.contato_emergencia.replace("pwd:", "");
+              if (remotePass) {
+                setAdminPasswordState(remotePass);
+                if (typeof window !== "undefined") {
+                  localStorage.setItem("sevendrive_admin_pass", remotePass);
+                }
+              }
+            }
           } else {
             setProfiles(initialProfiles);
           }
@@ -227,10 +237,15 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
       }
 
       if (typeof window !== "undefined") {
+        const sessionAuth = sessionStorage.getItem("sevendrive_admin_auth");
+        if (sessionAuth === "true") {
+          setIsAdminAuthenticated(true);
+        }
+
         const savedPass = localStorage.getItem("sevendrive_admin_pass");
-        if (savedPass) setAdminPasswordState(savedPass);
-        const savedAuth = localStorage.getItem("sevendrive_admin_auth");
-        if (savedAuth !== null) setIsAdminAuthenticated(savedAuth === "true");
+        if (savedPass) {
+          setAdminPasswordState(savedPass);
+        }
       }
     }
 
@@ -251,7 +266,7 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
       localStorage.setItem("sevendrive_fines", JSON.stringify(fines));
       localStorage.setItem("sevendrive_expenses", JSON.stringify(expenses));
       localStorage.setItem("sevendrive_settings", JSON.stringify(settings));
-      localStorage.setItem("sevendrive_admin_auth", String(isAdminAuthenticated));
+      sessionStorage.setItem("sevendrive_admin_auth", String(isAdminAuthenticated));
       localStorage.setItem("sevendrive_admin_pass", adminPassword);
     }
 
@@ -297,6 +312,9 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
   const loginAdmin = (password: string) => {
     if (password === adminPassword || password === "admin123") {
       setIsAdminAuthenticated(true);
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("sevendrive_admin_auth", "true");
+      }
       return true;
     }
     return false;
@@ -304,12 +322,26 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
 
   const logoutAdmin = () => {
     setIsAdminAuthenticated(false);
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("sevendrive_admin_auth");
+      localStorage.removeItem("sevendrive_admin_auth");
+    }
   };
 
-  const setAdminPassword = (newPass: string) => {
+  const setAdminPassword = async (newPass: string) => {
     setAdminPasswordState(newPass);
     if (typeof window !== "undefined") {
       localStorage.setItem("sevendrive_admin_pass", newPass);
+    }
+    // Sincroniza senha no banco através do profile do admin
+    try {
+      const supabase = createClient();
+      await supabase
+        .from("profiles")
+        .update({ contato_emergencia: `pwd:${newPass}`, updated_at: new Date().toISOString() })
+        .eq("role", "admin");
+    } catch (e) {
+      console.warn("Não foi possível salvar senha no Supabase:", e);
     }
   };
 
