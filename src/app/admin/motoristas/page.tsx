@@ -804,13 +804,53 @@ export default function MotoristasPage() {
               </button>
             </div>
 
-            <div className="max-h-[70vh] overflow-auto rounded-lg border border-zinc-800 bg-zinc-950 flex items-center justify-center p-2">
+            <div className="max-h-[75vh] min-h-[400px] overflow-auto rounded-lg border border-zinc-800 bg-zinc-950 flex flex-col items-center justify-center p-2 w-full">
               {viewingCnhUrl.startsWith("data:image") ? (
-                <img src={viewingCnhUrl} alt="CNH do Motorista" className="max-w-full h-auto rounded" />
+                <img src={viewingCnhUrl} alt="CNH do Motorista" className="max-w-full max-h-[70vh] object-contain rounded" />
+              ) : viewingCnhUrl.startsWith("data:application/pdf") ? (
+                <div className="w-full h-[65vh] flex flex-col space-y-3">
+                  <iframe
+                    src={viewingCnhUrl}
+                    className="w-full flex-1 rounded border border-zinc-700 bg-white"
+                    title="Visualização da CNH em PDF"
+                  />
+                  <div className="flex items-center justify-between p-2 bg-zinc-900 rounded-xl border border-zinc-800">
+                    <span className="text-xs text-zinc-300 font-semibold flex items-center gap-1.5">
+                      <FileText className="w-4 h-4 text-emerald-400" />
+                      CNH em formato PDF
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          const byteString = atob(viewingCnhUrl.split(',')[1]);
+                          const ab = new ArrayBuffer(byteString.length);
+                          const ia = new Uint8Array(ab);
+                          for (let i = 0; i < byteString.length; i++) {
+                            ia[i] = byteString.charCodeAt(i);
+                          }
+                          const blob = new Blob([ab], { type: 'application/pdf' });
+                          const blobUrl = URL.createObjectURL(blob);
+                          const link = document.createElement('a');
+                          link.href = blobUrl;
+                          link.download = 'CNH_Motorista.pdf';
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        } catch (e) {
+                          window.open(viewingCnhUrl, '_blank');
+                        }
+                      }}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow transition"
+                    >
+                      <ExternalLink className="w-4 h-4" /> Baixar / Abrir PDF Completo
+                    </button>
+                  </div>
+                </div>
               ) : (
                 <div className="text-center py-8 text-zinc-300 space-y-3">
                   <FileText className="w-12 h-12 text-blue-400 mx-auto" />
-                  <p className="text-xs">Documento em formato PDF arquivado com sucesso.</p>
+                  <p className="text-xs">Documento de CNH anexado.</p>
                   <a
                     href={viewingCnhUrl}
                     target="_blank"
