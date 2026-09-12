@@ -1,0 +1,329 @@
+"use client";
+
+import React, { useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useSevenDrive } from "@/lib/store";
+import {
+  Car,
+  ShieldCheck,
+  UserCheck,
+  Bell,
+  Wrench,
+  DollarSign,
+  FileCheck,
+  AlertTriangle,
+  FileText,
+  Sliders,
+  ChevronDown,
+  Menu,
+  X,
+  CreditCard,
+  History,
+} from "lucide-react";
+
+export function Navbar() {
+  const pathname = usePathname();
+  const {
+    currentUser,
+    setCurrentUser,
+    profiles,
+    payments,
+    activeAlerts,
+    triggerBrowserNotification,
+  } = useSevenDrive();
+
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [alertDropdownOpen, setAlertDropdownOpen] = useState(false);
+
+  // Pagamentos que requerem conferência pelo Locador
+  const pendingConferenceCount = payments.filter(
+    (p) => p.status === "pendente_conferencia"
+  ).length;
+
+  const isAdmin = currentUser.role === "admin";
+
+  interface NavLink {
+    href: string;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badge?: number;
+    badgeColor?: string;
+  }
+
+  const adminLinks: NavLink[] = [
+    { href: "/admin", label: "Dashboard", icon: Car },
+    {
+      href: "/admin/conferencia",
+      label: "Fila de Conferência",
+      icon: FileCheck,
+      badge: pendingConferenceCount,
+    },
+    { href: "/admin/veiculos", label: "Veículos & CRLV", icon: Car },
+    { href: "/admin/motoristas", label: "Motoristas & CNH", icon: UserCheck },
+    { href: "/admin/pagamentos", label: "Gestão Financeira", icon: DollarSign },
+    {
+      href: "/admin/manutencoes",
+      label: "Revisões & KM",
+      icon: Wrench,
+      badge: activeAlerts.length,
+      badgeColor: "bg-amber-500",
+    },
+    { href: "/admin/multas", label: "Multas & FICI", icon: FileText },
+    { href: "/admin/configuracoes", label: "Configurações", icon: Sliders },
+  ];
+
+  const driverLinks: NavLink[] = [
+    { href: "/motorista", label: "Meu Veículo", icon: Car },
+    { href: "/motorista/pagar", label: "Pagar & Vistoria", icon: CreditCard },
+    { href: "/motorista/manutencao", label: "Enviar Revisão/KM", icon: Wrench },
+    { href: "/motorista/historico", label: "Histórico", icon: History },
+  ];
+
+  const currentLinks: NavLink[] = isAdmin ? adminLinks : driverLinks;
+
+  return (
+    <header className="sticky top-0 z-40 w-full border-b border-zinc-800 bg-zinc-950/95 backdrop-blur-md">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16">
+          {/* Logo e Status Free */}
+          <div className="flex items-center gap-6">
+            <Link href={isAdmin ? "/admin" : "/motorista"} className="flex items-center gap-2.5 group">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-blue-600/30 group-hover:scale-105 transition">
+                <Car className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-black tracking-tight text-white">
+                    SEVEN <span className="text-blue-500">DRIVE</span>
+                  </span>
+                  <span className="hidden sm:inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    $0/Mês Free
+                  </span>
+                </div>
+                <span className="text-[10px] font-semibold text-zinc-400 block -mt-1">
+                  Gestão Inteligente de Frotas
+                </span>
+              </div>
+            </Link>
+
+            {/* Desktop Navigation Links */}
+            <nav className="hidden lg:flex items-center gap-1">
+              {currentLinks.map((link) => {
+                const Icon = link.icon;
+                const isActive = pathname === link.href;
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      isActive
+                        ? "bg-blue-600 text-white shadow-sm shadow-blue-600/20"
+                        : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    <span>{link.label}</span>
+                    {Boolean(link.badge) && link.badge! > 0 && (
+                      <span
+                        className={`ml-1 text-[10px] font-extrabold px-1.5 py-0.2 rounded-full text-white ${
+                          link.badgeColor || "bg-red-500 animate-pulse"
+                        }`}
+                      >
+                        {link.badge}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+
+          {/* Área Direita: Notificações & Alternador de Perfil */}
+          <div className="flex items-center gap-3">
+            {/* Sino de Notificações */}
+            <div className="relative">
+              <button
+                onClick={() => setAlertDropdownOpen(!alertDropdownOpen)}
+                className="relative p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition"
+                title="Notificações e Alertas"
+              >
+                <Bell className="w-5 h-5" />
+                {(activeAlerts.length > 0 || pendingConferenceCount > 0) && (
+                  <span className="absolute top-1 right-1 flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                  </span>
+                )}
+              </button>
+
+              {/* Dropdown de Notificações */}
+              {alertDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-4 z-50">
+                  <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+                    <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                      Central de Notificações
+                    </h4>
+                    <span className="text-[10px] text-zinc-400">
+                      {activeAlerts.length + pendingConferenceCount} pendências
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 mt-3 max-h-72 overflow-y-auto">
+                    {pendingConferenceCount > 0 && isAdmin && (
+                      <Link
+                        href="/admin/conferencia"
+                        onClick={() => setAlertDropdownOpen(false)}
+                        className="block p-2.5 rounded-xl bg-blue-950/40 border border-blue-800 hover:bg-blue-900/40 transition"
+                      >
+                        <div className="flex items-center gap-2 text-xs font-bold text-blue-300">
+                          <FileCheck className="w-4 h-4 text-blue-400" />
+                          <span>Fila de Conferência Ativa</span>
+                        </div>
+                        <p className="text-[11px] text-zinc-300 mt-1">
+                          {pendingConferenceCount} pagamento(s) com fotos de vistoria aguardando sua conferência.
+                        </p>
+                      </Link>
+                    )}
+
+                    {activeAlerts.map((alert) => (
+                      <div
+                        key={alert.id}
+                        className={`p-2.5 rounded-xl border text-xs ${
+                          alert.tipo === "urgente"
+                            ? "bg-red-950/40 border-red-800 text-red-200"
+                            : "bg-amber-950/40 border-amber-800 text-amber-200"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 font-bold mb-1">
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          <span>{alert.itemNome} ({alert.vehiclePlaca})</span>
+                        </div>
+                        <p className="text-[11px] text-zinc-300">{alert.mensagem}</p>
+                      </div>
+                    ))}
+
+                    {pendingConferenceCount === 0 && activeAlerts.length === 0 && (
+                      <p className="text-xs text-zinc-500 text-center py-4">
+                        Nenhum alerta pendente no momento.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Alternador Rápido de Perfil (Locador vs Locatário) */}
+            <div className="relative">
+              <button
+                onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+                className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition"
+              >
+                <div
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${
+                    isAdmin
+                      ? "bg-purple-600 text-white"
+                      : "bg-emerald-600 text-white"
+                  }`}
+                >
+                  {isAdmin ? "A" : "M"}
+                </div>
+                <div className="text-left hidden sm:block">
+                  <div className="text-xs font-bold text-white leading-none">
+                    {currentUser.full_name.split(" ")[0]}
+                  </div>
+                  <div className="text-[10px] text-zinc-400 leading-tight">
+                    {isAdmin ? "Locador (Admin)" : "Motorista"}
+                  </div>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+              </button>
+
+              {profileDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-64 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-2 z-50">
+                  <div className="px-3 py-2 border-b border-zinc-800 mb-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                      Alternar Visualização (Demonstração)
+                    </span>
+                  </div>
+
+                  {profiles.map((profile) => (
+                    <button
+                      key={profile.id}
+                      onClick={() => {
+                        setCurrentUser(profile);
+                        setProfileDropdownOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs transition ${
+                        currentUser.id === profile.id
+                          ? "bg-blue-600 text-white font-bold"
+                          : "text-zinc-300 hover:bg-zinc-800"
+                      }`}
+                    >
+                      <div
+                        className={`w-6 h-6 rounded-md flex items-center justify-center font-bold text-[10px] ${
+                          profile.role === "admin"
+                            ? "bg-purple-700 text-white"
+                            : "bg-emerald-700 text-white"
+                        }`}
+                      >
+                        {profile.role === "admin" ? "A" : "M"}
+                      </div>
+                      <div>
+                        <div className="font-semibold">{profile.full_name}</div>
+                        <div className="text-[10px] opacity-75">
+                          {profile.role === "admin" ? "Portal do Locador" : "Portal do Locatário"}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="lg:hidden p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition"
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Navigation Drawer */}
+        {mobileMenuOpen && (
+          <div className="lg:hidden py-4 border-t border-zinc-800 space-y-1">
+            {currentLinks.map((link) => {
+              const Icon = link.icon;
+              const isActive = pathname === link.href;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-semibold ${
+                    isActive
+                      ? "bg-blue-600 text-white"
+                      : "text-zinc-400 hover:text-white hover:bg-zinc-900"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Icon className="w-4 h-4" />
+                    <span>{link.label}</span>
+                  </div>
+                  {Boolean(link.badge) && link.badge! > 0 && (
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-500 text-white">
+                      {link.badge}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </header>
+  );
+}
