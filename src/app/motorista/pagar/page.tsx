@@ -37,10 +37,16 @@ export default function PagarWizardPage() {
   const activeContract = contracts.find((c) => c.driver_id === activeDriver.id && c.status === "ativo") || contracts[0];
   const vehicle = vehicles.find((v) => v.id === activeContract?.vehicle_id) || vehicles[0];
 
-  // Busca o pagamento em aberto do motorista
-  const currentPayment = payments.find(
-    (p) => (p.driver_id === activeDriver.id || p.vehicle_id === vehicle?.id) && (p.status === "pendente_envio" || p.status === "pendente_conferencia" || p.status === "atrasado")
-  ) || payments.find((p) => p.driver_id === activeDriver.id || p.vehicle_id === vehicle?.id) || payments[0];
+  // Busca o pagamento em aberto do motorista ordenado cronologicamente (o mais próximo a vencer primeiro)
+  const driverPayments = payments.filter(
+    (p) => (activeContract && p.contract_id === activeContract.id) || p.driver_id === activeDriver.id || p.vehicle_id === vehicle?.id
+  );
+
+  const openPayments = driverPayments
+    .filter((p) => p.status === "pendente_envio" || p.status === "pendente_conferencia" || p.status === "atrasado")
+    .sort((a, b) => new Date(a.data_vencimento).getTime() - new Date(b.data_vencimento).getTime());
+
+  const currentPayment = openPayments[0] || driverPayments.sort((a, b) => new Date(b.data_vencimento).getTime() - new Date(a.data_vencimento).getTime())[0];
 
   // Estados do Wizard
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
@@ -194,6 +200,7 @@ export default function PagarWizardPage() {
             <PixQrCode
               amount={Number(currentPayment.valor)}
               pixKey={settings.chave_pix}
+              keyType={settings.tipo_chave_pix}
               merchantName={settings.nome_beneficiario}
               merchantCity={settings.cidade_beneficiario}
             />

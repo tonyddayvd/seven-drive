@@ -71,7 +71,7 @@ export function formatPhone(phone: string | null | undefined): string {
 }
 
 // ==============================================================================
-// GERADOR DE CÓDIGO PIX (EMV / BR CODE PADRÃO BANCO CENTRAL)
+// GERADOR DE CÓDIGO PIX (EMV / BR CODE PADRÃO BANCO CENTRAL DO BRASIL)
 // ==============================================================================
 
 function emvField(id: string, value: string): string {
@@ -95,33 +95,94 @@ function crc16(str: string): string {
   return crc.toString(16).toUpperCase().padStart(4, '0');
 }
 
+/**
+ * Normaliza a chave PIX conforme o padrão do Banco Central (BACEN):
+ * - Telefone: Deve estar no formato internacional E.164 (+55DDDNÚMERO). Sem o +55, os bancos rejeitam.
+ * - CPF: Apenas 11 números.
+ * - CNPJ: Apenas 14 números.
+ * - E-mail / EVP: Letras minúsculas / formato original.
+ */
+export function normalizePixKey(key: string, keyType?: string): string {
+  if (!key) return "";
+  let cleanKey = key.trim();
+
+  const isDigitsOnly = /^\d+$/.test(cleanKey.replace(/[^\d]/g, ""));
+  const rawDigits = cleanKey.replace(/\D/g, "");
+
+  const type = keyType?.toLowerCase() || "";
+
+  if (type.includes("tel") || type.includes("cel") || (!type && rawDigits.length === 11 && !cleanKey.includes("@") && !cleanKey.includes("."))) {
+    // Se for telefone (ex: 82988883740 ou (82) 98888-3740)
+    if (type.includes("tel") || type.includes("cel")) {
+      if (!cleanKey.startsWith("+")) {
+        return `+55${rawDigits}`;
+      }
+      return `+${rawDigits}`;
+    }
+  }
+
+  if (type.includes("cpf") || type.includes("cnpj")) {
+    return rawDigits;
+  }
+
+  // Se tem arroba, é email
+  if (cleanKey.includes("@")) {
+    return cleanKey.toLowerCase();
+  }
+
+  return cleanKey;
+}
+
 export function generatePixPayload({
   key,
+  keyType,
   merchantName = "Seven Drive",
   merchantCity = "SAO PAULO",
   amount,
   txid = "***",
 }: {
   key: string;
+  keyType?: string;
   merchantName?: string;
   merchantCity?: string;
   amount?: number;
   txid?: string;
 }): string {
-  // Limpeza de campos para formato padrão BR Code
-  const cleanKey = key.trim();
-  const cleanName = merchantName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").slice(0, 25);
-  const cleanCity = merchantCity.normalize("NFD").replace(/[\u0300-\u036f]/g, "").slice(0, 15);
-  const cleanTxid = txid.replace(/[^A-Za-z0-9]/g, "").slice(0, 25) || "***";
+  // Normalização da Chave PIX segundo o BACEN
+  const cleanKey = normalizePixKey(key, keyType);
+
+  // Nome do recebedor (Max 25 caracteres, sem acentos, maiúsculo)
+  const cleanName = merchantName
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9 ]/g, "")
+    .trim()
+    .slice(0, 25)
+    .toUpperCase() || "RECEBEDOR";
+
+  // Cidade do recebedor (Max 15 caracteres, sem acentos, maiúsculo)
+  const cleanCity = merchantCity
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9 ]/g, "")
+    .trim()
+    .slice(0, 15)
+    .toUpperCase() || "SAO PAULO";
+
+  // O BACEN padroniza '***' para QR Code estático sem txid específico, ou alfanumérico simples sem espaços
+  const cleanTxid = txid && txid !== "***" 
+    ? txid.replace(/[^A-Za-z0-9]/g, "").slice(0, 25) 
+    : "***";
 
   // GUI + Chave
   const accountInfo = emvField("00", "br.gov.bcb.pix") + emvField("01", cleanKey);
 
   let payload =
     emvField("00", "01") + // Payload Format Indicator
+    emvField("01", "12") + // Point of Initiation Method (12 = QR reutilizável)
     emvField("26", accountInfo) + // Merchant Account Information
     emvField("52", "0000") + // Merchant Category Code
-    emvField("53", "986"); // Transaction Currency (986 = BRL)
+    emvField("53", "986"); // Transaction Currency (986 = Real BRL)
 
   if (amount && amount > 0) {
     payload += emvField("54", amount.toFixed(2));
@@ -131,7 +192,7 @@ export function generatePixPayload({
     emvField("58", "BR") + // Country Code
     emvField("59", cleanName) + // Merchant Name
     emvField("60", cleanCity) + // Merchant City
-    emvField("62", emvField("05", cleanTxid)) + // Additional Data Field Template (TxID)
+    emvField("62", emvField("05", cleanTxid)) + // Additional Data Field (TxID)
     "6304"; // CRC16 Header
 
   const checksum = crc16(payload);

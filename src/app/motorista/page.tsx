@@ -44,10 +44,18 @@ export default function MotoristaPage() {
 
   const vehicle = vehicles.find((v) => v.id === contract?.vehicle_id) || vehicles[0];
 
-  // Encontra o pagamento mais recente / pendente deste contrato
-  const currentPayment = payments
-    .filter((p) => (contract && p.contract_id === contract.id) || p.driver_id === activeDriver.id)
-    .sort((a, b) => new Date(b.data_vencimento).getTime() - new Date(a.data_vencimento).getTime())[0];
+  // Encontra o próximo pagamento em aberto / vencimento iminente deste motorista
+  const driverPayments = payments.filter(
+    (p) => (contract && p.contract_id === contract.id) || p.driver_id === activeDriver.id
+  );
+
+  // 1. Prioriza pagamentos em aberto (pendente_envio, atrasado, pendente_conferencia) em ordem cronológica (mais antigo/próximo primeiro)
+  const openPayments = driverPayments
+    .filter((p) => p.status === "pendente_envio" || p.status === "atrasado" || p.status === "pendente_conferencia")
+    .sort((a, b) => new Date(a.data_vencimento).getTime() - new Date(b.data_vencimento).getTime());
+
+  // 2. Se não houver pendências em aberto, pega o mais recente já confirmado
+  const currentPayment = openPayments[0] || driverPayments.sort((a, b) => new Date(b.data_vencimento).getTime() - new Date(a.data_vencimento).getTime())[0];
 
   const vehicleAlerts = activeAlerts.filter((a) => a.vehicleId === vehicle?.id);
 

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { generatePixPayload, formatCurrency } from "@/lib/utils";
+import { generatePixPayload, formatCurrency, normalizePixKey } from "@/lib/utils";
 import {
   Copy,
   Check,
@@ -18,6 +18,7 @@ import {
 interface PixQrCodeProps {
   amount: number;
   pixKey: string;
+  keyType?: string;
   merchantName?: string;
   merchantCity?: string;
   txid?: string;
@@ -26,9 +27,10 @@ interface PixQrCodeProps {
 export function PixQrCode({
   amount,
   pixKey,
+  keyType,
   merchantName = "Seven Drive",
   merchantCity = "SAO PAULO",
-  txid = "ALUGUEL",
+  txid = "***",
 }: PixQrCodeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [copiedPayload, setCopiedPayload] = useState(false);
@@ -36,10 +38,13 @@ export function PixQrCode({
   const [showQrCode, setShowQrCode] = useState(false);
   const [brCodePayload, setBrCodePayload] = useState("");
 
+  const normalizedKey = normalizePixKey(pixKey, keyType);
+
   useEffect(() => {
     // Gera o código EMV BR Code oficial do Banco Central com valor exato
     const payload = generatePixPayload({
       key: pixKey,
+      keyType,
       merchantName,
       merchantCity,
       amount,
@@ -77,7 +82,7 @@ export function PixQrCode({
 
   const handleCopyKeyOnly = () => {
     if (typeof window !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(pixKey);
+      navigator.clipboard.writeText(normalizedKey);
       setCopiedKeyOnly(true);
       setTimeout(() => setCopiedKeyOnly(false), 4000);
     }
@@ -214,7 +219,10 @@ export function PixQrCode({
       <div className="pt-2 border-t border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
         <div className="text-zinc-400">
           <span>Chave PIX do Locador: </span>
-          <span className="font-mono text-zinc-200 font-bold ml-1">{pixKey}</span>
+          <span className="font-mono text-zinc-200 font-bold ml-1">{normalizedKey}</span>
+          {normalizedKey !== pixKey && (
+            <span className="text-[10px] text-zinc-500 ml-1.5">({pixKey})</span>
+          )}
         </div>
 
         <button
