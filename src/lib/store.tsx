@@ -25,6 +25,7 @@ import {
   initialExpenses,
   initialSettings,
 } from "./mock-data";
+import { createClient } from "./supabase/client";
 
 export interface AlertItem {
   id: string;
@@ -149,46 +150,122 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
   const [settings, setSettings] = useState<SystemSettings>(initialSettings);
   const [activeAlerts, setActiveAlerts] = useState<AlertItem[]>([]);
 
-  // Carrega do localStorage no client para persistência completa
+  // Sincronização em Nuvem (Supabase) + Fallback LocalStorage
+  const [isCloudLoaded, setIsCloudLoaded] = useState(false);
+
+  // 1. Carrega dados do Supabase na inicialização; se o Supabase estiver vazio e houver dados locais, sobe para a nuvem
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const savedVehicles = localStorage.getItem("sevendrive_vehicles");
-      if (savedVehicles) setVehicles(JSON.parse(savedVehicles));
+    async function loadData() {
+      const supabase = createClient();
 
-      const savedProfiles = localStorage.getItem("sevendrive_profiles");
-      if (savedProfiles) setProfiles(JSON.parse(savedProfiles));
+      try {
+        const [
+          { data: cloudVehicles },
+          { data: cloudProfiles },
+          { data: cloudContracts },
+          { data: cloudPayments },
+          { data: cloudInspections },
+          { data: cloudMaintenances },
+          { data: cloudFines },
+          { data: cloudExpenses },
+          { data: cloudSettings },
+        ] = await Promise.all([
+          supabase.from("vehicles").select("*"),
+          supabase.from("profiles").select("*"),
+          supabase.from("contracts").select("*"),
+          supabase.from("payments").select("*"),
+          supabase.from("inspections").select("*"),
+          supabase.from("maintenances").select("*"),
+          supabase.from("fines").select("*"),
+          supabase.from("expenses").select("*"),
+          supabase.from("system_settings").select("*"),
+        ]);
 
-      const savedContracts = localStorage.getItem("sevendrive_contracts");
-      if (savedContracts) setContracts(JSON.parse(savedContracts));
+        const hasCloudData = cloudVehicles && cloudVehicles.length > 0;
 
-      const savedPayments = localStorage.getItem("sevendrive_payments");
-      if (savedPayments) setPayments(JSON.parse(savedPayments));
+        if (hasCloudData) {
+          // O Supabase tem dados: eles são a fonte oficial de verdade para celular, PC e todos os dispositivos!
+          if (cloudVehicles) setVehicles(cloudVehicles);
+          if (cloudProfiles && cloudProfiles.length > 0) setProfiles(cloudProfiles);
+          if (cloudContracts) setContracts(cloudContracts);
+          if (cloudPayments) setPayments(cloudPayments);
+          if (cloudInspections) setInspections(cloudInspections);
+          if (cloudMaintenances) setMaintenances(cloudMaintenances);
+          if (cloudFines) setFines(cloudFines);
+          if (cloudExpenses) setExpenses(cloudExpenses);
+          if (cloudSettings && cloudSettings.length > 0) setSettings(cloudSettings[0] as any);
+        } else {
+          // Nuvem ainda vazia: verifica se este dispositivo tem dados cadastrados no localStorage
+          if (typeof window !== "undefined") {
+            const savedVehicles = localStorage.getItem("sevendrive_vehicles");
+            const savedProfiles = localStorage.getItem("sevendrive_profiles");
+            const savedContracts = localStorage.getItem("sevendrive_contracts");
+            const savedPayments = localStorage.getItem("sevendrive_payments");
+            const savedInspections = localStorage.getItem("sevendrive_inspections");
+            const savedMaintenances = localStorage.getItem("sevendrive_maintenances");
+            const savedFines = localStorage.getItem("sevendrive_fines");
+            const savedExpenses = localStorage.getItem("sevendrive_expenses");
+            const savedSettings = localStorage.getItem("sevendrive_settings");
 
-      const savedInspections = localStorage.getItem("sevendrive_inspections");
-      if (savedInspections) setInspections(JSON.parse(savedInspections));
+            const localVehicles = savedVehicles ? JSON.parse(savedVehicles) : null;
+            const localProfiles = savedProfiles ? JSON.parse(savedProfiles) : null;
+            const localContracts = savedContracts ? JSON.parse(savedContracts) : null;
+            const localPayments = savedPayments ? JSON.parse(savedPayments) : null;
+            const localInspections = savedInspections ? JSON.parse(savedInspections) : null;
+            const localMaintenances = savedMaintenances ? JSON.parse(savedMaintenances) : null;
+            const localFines = savedFines ? JSON.parse(savedFines) : null;
+            const localExpenses = savedExpenses ? JSON.parse(savedExpenses) : null;
+            const localSettings = savedSettings ? JSON.parse(savedSettings) : null;
 
-      const savedMaintenances = localStorage.getItem("sevendrive_maintenances");
-      if (savedMaintenances) setMaintenances(JSON.parse(savedMaintenances));
+            if (localVehicles && localVehicles.length > 0) {
+              setVehicles(localVehicles);
+              if (localProfiles) setProfiles(localProfiles);
+              if (localContracts) setContracts(localContracts);
+              if (localPayments) setPayments(localPayments);
+              if (localInspections) setInspections(localInspections);
+              if (localMaintenances) setMaintenances(localMaintenances);
+              if (localFines) setFines(localFines);
+              if (localExpenses) setExpenses(localExpenses);
+              if (localSettings) setSettings(localSettings);
 
-      const savedFines = localStorage.getItem("sevendrive_fines");
-      if (savedFines) setFines(JSON.parse(savedFines));
+              // Faz o upload inicial automático (Seed) dos dados deste dispositivo para o Supabase!
+              try {
+                if (localProfiles?.length) await supabase.from("profiles").upsert(localProfiles);
+                if (localVehicles?.length) await supabase.from("vehicles").upsert(localVehicles);
+                if (localContracts?.length) await supabase.from("contracts").upsert(localContracts);
+                if (localPayments?.length) await supabase.from("payments").upsert(localPayments);
+                if (localInspections?.length) await supabase.from("inspections").upsert(localInspections);
+                if (localMaintenances?.length) await supabase.from("maintenances").upsert(localMaintenances);
+                if (localFines?.length) await supabase.from("fines").upsert(localFines);
+                if (localExpenses?.length) await supabase.from("expenses").upsert(localExpenses);
+                if (localSettings) await supabase.from("system_settings").upsert([localSettings]);
+              } catch (seedErr) {
+                console.warn("Aviso ao semear Supabase:", seedErr);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Erro conectando com Supabase, usando persistência local:", err);
+      } finally {
+        setIsCloudLoaded(true);
+      }
 
-      const savedExpenses = localStorage.getItem("sevendrive_expenses");
-      if (savedExpenses) setExpenses(JSON.parse(savedExpenses));
-
-      const savedSettings = localStorage.getItem("sevendrive_settings");
-      if (savedSettings) setSettings(JSON.parse(savedSettings));
-
-      const savedPass = localStorage.getItem("sevendrive_admin_pass");
-      if (savedPass) setAdminPasswordState(savedPass);
-
-      const savedAuth = localStorage.getItem("sevendrive_admin_auth");
-      if (savedAuth !== null) setIsAdminAuthenticated(savedAuth === "true");
+      if (typeof window !== "undefined") {
+        const savedPass = localStorage.getItem("sevendrive_admin_pass");
+        if (savedPass) setAdminPasswordState(savedPass);
+        const savedAuth = localStorage.getItem("sevendrive_admin_auth");
+        if (savedAuth !== null) setIsAdminAuthenticated(savedAuth === "true");
+      }
     }
+
+    loadData();
   }, []);
 
-  // Salva automaticamente no localStorage quando qualquer entidade é alterada
+  // Salva no Supabase e no localStorage sempre que houver alterações
   useEffect(() => {
+    if (!isCloudLoaded) return;
+
     if (typeof window !== "undefined") {
       localStorage.setItem("sevendrive_vehicles", JSON.stringify(vehicles));
       localStorage.setItem("sevendrive_profiles", JSON.stringify(profiles));
@@ -202,6 +279,30 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
       localStorage.setItem("sevendrive_admin_auth", String(isAdminAuthenticated));
       localStorage.setItem("sevendrive_admin_pass", adminPassword);
     }
+
+    // Persistência em Nuvem (Supabase)
+    const supabase = createClient();
+    async function syncToCloud() {
+      try {
+        if (profiles.length) await supabase.from("profiles").upsert(profiles);
+        if (vehicles.length) await supabase.from("vehicles").upsert(vehicles);
+        if (contracts.length) await supabase.from("contracts").upsert(contracts);
+        if (payments.length) await supabase.from("payments").upsert(payments);
+        if (inspections.length) await supabase.from("inspections").upsert(inspections);
+        if (maintenances.length) await supabase.from("maintenances").upsert(maintenances);
+        if (fines.length) await supabase.from("fines").upsert(fines);
+        if (expenses.length) await supabase.from("expenses").upsert(expenses);
+        if (settings) await supabase.from("system_settings").upsert([settings]);
+      } catch (err) {
+        console.warn("Aviso ao sincronizar dados na nuvem:", err);
+      }
+    }
+
+    const timer = setTimeout(() => {
+      syncToCloud();
+    }, 400);
+
+    return () => clearTimeout(timer);
   }, [
     vehicles,
     profiles,
@@ -214,6 +315,7 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     settings,
     isAdminAuthenticated,
     adminPassword,
+    isCloudLoaded,
   ]);
 
   // Autenticação do Admin

@@ -191,7 +191,72 @@ export default function ConfiguracoesPage() {
         </div>
       </div>
 
-      {/* 3. Limpeza de Custos Antigos / Dados Órfãos */}
+      {/* 3. Status da Nuvem Supabase & Sincronização em Tempo Real */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <Database className="w-5 h-5 text-blue-400" />
+              <h2 className="text-base font-bold text-white">Nuvem Supabase & Sincronização Contínua</h2>
+              <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                Nuvem Ativa & Conectada
+              </span>
+            </div>
+            <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+              Todos os dados agora são salvos diretamente no seu banco de dados em nuvem. Qualquer veículo, motorista ou pagamento criado no computador é refletido automaticamente no celular e vice-versa.
+            </p>
+          </div>
+        </div>
+
+        <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="text-xs text-zinc-300 space-y-0.5">
+            <span className="font-bold text-white block">Sincronização Multi-Dispositivo</span>
+            <span className="text-zinc-400 block text-[11px]">
+              Se você acabou de abrir o sistema no computador onde cadastrou seu veículo, clique abaixo para enviar os dados cadastrados para a nuvem imediatamente.
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const { createClient } = await import("@/lib/supabase/client");
+                const supabase = createClient();
+                const v = localStorage.getItem("sevendrive_vehicles");
+                const p = localStorage.getItem("sevendrive_profiles");
+                const c = localStorage.getItem("sevendrive_contracts");
+                const pay = localStorage.getItem("sevendrive_payments");
+                const insp = localStorage.getItem("sevendrive_inspections");
+                const m = localStorage.getItem("sevendrive_maintenances");
+                const f = localStorage.getItem("sevendrive_fines");
+                const exp = localStorage.getItem("sevendrive_expenses");
+                const s = localStorage.getItem("sevendrive_settings");
+
+                if (v) await supabase.from("vehicles").upsert(JSON.parse(v));
+                if (p) await supabase.from("profiles").upsert(JSON.parse(p));
+                if (c) await supabase.from("contracts").upsert(JSON.parse(c));
+                if (pay) await supabase.from("payments").upsert(JSON.parse(pay));
+                if (insp) await supabase.from("inspections").upsert(JSON.parse(insp));
+                if (m) await supabase.from("maintenances").upsert(JSON.parse(m));
+                if (f) await supabase.from("fines").upsert(JSON.parse(f));
+                if (exp) await supabase.from("expenses").upsert(JSON.parse(exp));
+                if (s) await supabase.from("system_settings").upsert([JSON.parse(s)]);
+
+                alert("Sucesso! Todos os dados do computador foram enviados para a nuvem. Agora abra o celular e atualize a página!");
+              } catch (err: any) {
+                alert("Erro ao enviar: " + err.message);
+              }
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md transition whitespace-nowrap"
+          >
+            <Database className="w-4 h-4" />
+            <span>Enviar Dados do PC para Nuvem</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 4. Limpeza de Custos Antigos / Dados Órfãos */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-3">
         <h2 className="text-base font-bold text-white flex items-center gap-2">
           <Trash2 className="w-5 h-5 text-red-400" />
