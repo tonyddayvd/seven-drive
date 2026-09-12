@@ -498,10 +498,39 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     }, 100);
   };
 
-  const updateContract = (id: string, updates: Partial<Contract>) => {
+  const updateContract = async (id: string, updates: Partial<Contract>) => {
     setContracts((prev) =>
       prev.map((c) => (c.id === id ? { ...c, ...updates, updated_at: new Date().toISOString() } : c))
     );
+
+    // Se o valor do aluguel mudou, sincroniza os pagamentos pendentes deste contrato
+    if (updates.valor_aluguel !== undefined) {
+      setPayments((prev) =>
+        prev.map((p) =>
+          p.contract_id === id && p.status === "pendente_envio"
+            ? { ...p, valor: Number(updates.valor_aluguel), updated_at: new Date().toISOString() }
+            : p
+        )
+      );
+    }
+
+    try {
+      const supabase = createClient();
+      await supabase
+        .from("contracts")
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq("id", id);
+
+      if (updates.valor_aluguel !== undefined) {
+        await supabase
+          .from("payments")
+          .update({ valor: Number(updates.valor_aluguel), updated_at: new Date().toISOString() })
+          .eq("contract_id", id)
+          .eq("status", "pendente_envio");
+      }
+    } catch (err) {
+      console.error("Erro ao atualizar contrato no Supabase:", err);
+    }
   };
 
   const deleteContract = async (id: string) => {
@@ -795,8 +824,15 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
   };
 
   // Configurações
-  const updateSettings = (newSettings: Partial<SystemSettings>) => {
-    setSettings((prev) => ({ ...prev, ...newSettings, updated_at: new Date().toISOString() }));
+  const updateSettings = async (newSettings: Partial<SystemSettings>) => {
+    const updated = { ...settings, ...newSettings, updated_at: new Date().toISOString() };
+    setSettings(updated);
+    try {
+      const supabase = createClient();
+      await supabase.from("system_settings").upsert([updated]);
+    } catch (err) {
+      console.error("Erro ao salvar configurações no Supabase:", err);
+    }
   };
 
   // Saldo Líquido Consolidado por Veículo (Filtra rigorosamente)

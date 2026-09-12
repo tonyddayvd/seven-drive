@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useSevenDrive } from "@/lib/store";
 import {
   Sliders,
@@ -35,6 +35,18 @@ export default function ConfiguracoesPage() {
     cidade_beneficiario: settings.cidade_beneficiario,
     dias_alerta_vencimento: settings.dias_alerta_vencimento,
   });
+
+  useEffect(() => {
+    if (settings) {
+      setFormData({
+        chave_pix: settings.chave_pix || "",
+        tipo_chave_pix: settings.tipo_chave_pix || "email",
+        nome_beneficiario: settings.nome_beneficiario || "",
+        cidade_beneficiario: settings.cidade_beneficiario || "SAO PAULO",
+        dias_alerta_vencimento: settings.dias_alerta_vencimento || 2,
+      });
+    }
+  }, [settings]);
 
   const [newPassword, setNewPassword] = useState("");
   const [passwordSaved, setPasswordSaved] = useState(false);

@@ -19,13 +19,16 @@ import {
   Eye,
   ExternalLink,
   Sparkles,
+  QrCode,
 } from "lucide-react";
+import Link from "next/link";
 
 export default function MotoristasPage() {
   const {
     profiles,
     vehicles,
     contracts,
+    settings,
     addDriver,
     updateDriver,
     deleteDriver,
@@ -39,6 +42,7 @@ export default function MotoristasPage() {
   const [isDriverModalOpen, setIsDriverModalOpen] = useState(false);
   const [isContractModalOpen, setIsContractModalOpen] = useState(false);
   const [editingDriver, setEditingDriver] = useState<Profile | null>(null);
+  const [editingContract, setEditingContract] = useState<Contract | null>(null);
   const [cnhFileName, setCnhFileName] = useState<string>("");
   const [viewingCnhUrl, setViewingCnhUrl] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -60,15 +64,25 @@ export default function MotoristasPage() {
   });
 
   // Form State Contract
-  const [contractForm, setContractForm] = useState({
+  const [contractForm, setContractForm] = useState<{
+    vehicle_id: string;
+    driver_id: string;
+    valor_aluguel: number;
+    periodicidade: "semanal" | "mensal";
+    dia_vencimento: number;
+    data_inicio: string;
+    data_fim: string;
+    status: "ativo" | "encerrado";
+    observacoes: string;
+  }>({
     vehicle_id: vehicles[0]?.id || "",
     driver_id: profiles.find((p) => p.role === "driver")?.id || "",
     valor_aluguel: 650,
-    periodicidade: "semanal" as const,
+    periodicidade: "semanal",
     dia_vencimento: 1, // 1 = Segunda-feira por padrão
     data_inicio: new Date().toISOString().split("T")[0],
     data_fim: "",
-    status: "ativo" as const,
+    status: "ativo",
     observacoes: "",
   });
 
@@ -112,6 +126,38 @@ export default function MotoristasPage() {
     setIsDriverModalOpen(true);
   };
 
+  const handleOpenAddContract = () => {
+    setEditingContract(null);
+    setContractForm({
+      vehicle_id: vehicles[0]?.id || "",
+      driver_id: profiles.find((p) => p.role === "driver")?.id || "",
+      valor_aluguel: 650,
+      periodicidade: "semanal",
+      dia_vencimento: 1,
+      data_inicio: new Date().toISOString().split("T")[0],
+      data_fim: "",
+      status: "ativo",
+      observacoes: "",
+    });
+    setIsContractModalOpen(true);
+  };
+
+  const handleOpenEditContract = (c: Contract) => {
+    setEditingContract(c);
+    setContractForm({
+      vehicle_id: c.vehicle_id,
+      driver_id: c.driver_id,
+      valor_aluguel: c.valor_aluguel,
+      periodicidade: c.periodicidade,
+      dia_vencimento: c.dia_vencimento,
+      data_inicio: c.data_inicio,
+      data_fim: c.data_fim || "",
+      status: c.status,
+      observacoes: c.observacoes || "",
+    });
+    setIsContractModalOpen(true);
+  };
+
   const handleCnhFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -144,19 +190,35 @@ export default function MotoristasPage() {
 
   const handleContractSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    addContract({
-      vehicle_id: contractForm.vehicle_id,
-      driver_id: contractForm.driver_id,
-      valor_aluguel: Number(contractForm.valor_aluguel),
-      periodicidade: contractForm.periodicidade,
-      dia_vencimento: Number(contractForm.dia_vencimento),
-      data_inicio: contractForm.data_inicio,
-      data_fim: contractForm.data_fim || null,
-      status: contractForm.status,
-      observacoes: contractForm.observacoes,
-    });
-    setIsContractModalOpen(false);
-    setSuccessMessage("Contrato criado com sucesso! As parcelas semanais foram geradas automaticamente para o dia fixo da semana.");
+    if (editingContract) {
+      updateContract(editingContract.id, {
+        vehicle_id: contractForm.vehicle_id,
+        driver_id: contractForm.driver_id,
+        valor_aluguel: Number(contractForm.valor_aluguel),
+        periodicidade: contractForm.periodicidade,
+        dia_vencimento: Number(contractForm.dia_vencimento),
+        data_inicio: contractForm.data_inicio,
+        data_fim: contractForm.data_fim || null,
+        status: contractForm.status,
+        observacoes: contractForm.observacoes,
+      });
+      setIsContractModalOpen(false);
+      setSuccessMessage("Contrato atualizado com sucesso! As parcelas futuras em aberto foram recalculadas com o novo valor.");
+    } else {
+      addContract({
+        vehicle_id: contractForm.vehicle_id,
+        driver_id: contractForm.driver_id,
+        valor_aluguel: Number(contractForm.valor_aluguel),
+        periodicidade: contractForm.periodicidade,
+        dia_vencimento: Number(contractForm.dia_vencimento),
+        data_inicio: contractForm.data_inicio,
+        data_fim: contractForm.data_fim || null,
+        status: contractForm.status,
+        observacoes: contractForm.observacoes,
+      });
+      setIsContractModalOpen(false);
+      setSuccessMessage("Contrato criado com sucesso! As parcelas semanais foram geradas automaticamente para o dia fixo da semana.");
+    }
     setTimeout(() => setSuccessMessage(null), 5000);
   };
 
@@ -194,7 +256,7 @@ export default function MotoristasPage() {
             <span>Cadastrar Motorista</span>
           </button>
           <button
-            onClick={() => setIsContractModalOpen(true)}
+            onClick={handleOpenAddContract}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 transition"
           >
             <LinkIcon className="w-4 h-4" />
@@ -360,100 +422,140 @@ export default function MotoristasPage() {
 
       {/* Visualização de Contratos */}
       {activeTab === "contracts" && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-zinc-800 bg-zinc-950/60 text-zinc-400 uppercase font-semibold text-[10px] tracking-wider">
-                  <th className="py-3.5 px-4">Motorista (Locatário)</th>
-                  <th className="py-3.5 px-4">Veículo Alugado</th>
-                  <th className="py-3.5 px-4">Valor Aluguel</th>
-                  <th className="py-3.5 px-4">Dia Fixo da Semana</th>
-                  <th className="py-3.5 px-4">Data Início</th>
-                  <th className="py-3.5 px-4">Status</th>
-                  <th className="py-3.5 px-4 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
-                {contracts.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-8 text-center text-zinc-500 italic">
-                      Nenhum contrato ativo cadastrado.
-                    </td>
-                  </tr>
-                ) : (
-                  contracts.map((c) => {
-                    const driver = profiles.find((d) => d.id === c.driver_id);
-                    const vehicle = vehicles.find((v) => v.id === c.vehicle_id);
+        <div className="space-y-4">
+          {/* Banner de Informação da Chave PIX Ativa */}
+          <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl">
+                <QrCode className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="font-bold text-white block">Chave PIX Ativa para Recebimento de Aluguéis:</span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="font-mono text-emerald-400 font-bold">{settings.chave_pix}</span>
+                  <span className="text-zinc-400">({settings.tipo_chave_pix} • {settings.nome_beneficiario})</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Link
+                href="/admin/configuracoes"
+                className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 font-semibold transition"
+              >
+                Alterar Chave PIX
+              </Link>
+              <button
+                onClick={handleOpenAddContract}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold shadow transition"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Novo Contrato</span>
+              </button>
+            </div>
+          </div>
 
-                    return (
-                      <tr key={c.id} className="hover:bg-zinc-800/40 transition">
-                        <td className="py-3.5 px-4 font-bold text-white">
-                          {driver?.full_name || "Motorista não encontrado"}
-                        </td>
-                        <td className="py-3.5 px-4 font-mono">
-                          <span className="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 font-bold">
-                            {formatPlate(vehicle?.placa)}
-                          </span>
-                          <span className="block text-[11px] text-zinc-400 mt-0.5">
-                            {vehicle?.marca} {vehicle?.modelo}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 font-bold text-emerald-400">
-                          {formatCurrency(c.valor_aluguel)} <span className="text-[10px] text-zinc-400">/sem</span>
-                        </td>
-                        <td className="py-3.5 px-4 font-semibold text-zinc-200">
-                          <span className="px-2 py-1 rounded-lg bg-blue-950/60 border border-blue-800 text-blue-300">
-                            {weekdayNames[c.dia_vencimento] || `Dia ${c.dia_vencimento}`}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 text-zinc-400">
-                          {formatDate(c.data_inicio)}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span
-                            className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                              c.status === "ativo"
-                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                : "bg-zinc-800 text-zinc-400"
-                            }`}
-                          >
-                            {c.status}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => {
-                                generateWeeklyPaymentsForContract(c.id, 8);
-                                setSuccessMessage(`Semanas futuras estendidas com sucesso para ${weekdayNames[c.dia_vencimento]}!`);
-                                setTimeout(() => setSuccessMessage(null), 4000);
-                              }}
-                              className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-[11px] font-bold border border-zinc-700 transition flex items-center gap-1"
-                              title="O sistema já gera as parcelas automaticamente. Clique aqui apenas se desejar adiantar mais 2 meses de parcelas com antecedência."
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-zinc-800 bg-zinc-950/60 text-zinc-400 uppercase font-semibold text-[10px] tracking-wider">
+                    <th className="py-3.5 px-4">Motorista (Locatário)</th>
+                    <th className="py-3.5 px-4">Veículo Alugado</th>
+                    <th className="py-3.5 px-4">Valor Aluguel</th>
+                    <th className="py-3.5 px-4">Dia Fixo da Semana</th>
+                    <th className="py-3.5 px-4">Data Início</th>
+                    <th className="py-3.5 px-4">Status</th>
+                    <th className="py-3.5 px-4 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
+                  {contracts.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-zinc-500 italic">
+                        Nenhum contrato ativo cadastrado.
+                      </td>
+                    </tr>
+                  ) : (
+                    contracts.map((c) => {
+                      const driver = profiles.find((d) => d.id === c.driver_id);
+                      const vehicle = vehicles.find((v) => v.id === c.vehicle_id);
+
+                      return (
+                        <tr key={c.id} className="hover:bg-zinc-800/40 transition">
+                          <td className="py-3.5 px-4 font-bold text-white">
+                            {driver?.full_name || "Motorista não encontrado"}
+                          </td>
+                          <td className="py-3.5 px-4 font-mono">
+                            <span className="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 font-bold">
+                              {formatPlate(vehicle?.placa)}
+                            </span>
+                            <span className="block text-[11px] text-zinc-400 mt-0.5">
+                              {vehicle?.marca} {vehicle?.modelo}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 font-bold text-emerald-400">
+                            {formatCurrency(c.valor_aluguel)} <span className="text-[10px] text-zinc-400">/sem</span>
+                          </td>
+                          <td className="py-3.5 px-4 font-semibold text-zinc-200">
+                            <span className="px-2 py-1 rounded-lg bg-blue-950/60 border border-blue-800 text-blue-300">
+                              {weekdayNames[c.dia_vencimento] || `Dia ${c.dia_vencimento}`}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-zinc-400">
+                            {formatDate(c.data_inicio)}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span
+                              className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                                c.status === "ativo"
+                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                  : "bg-zinc-800 text-zinc-400"
+                              }`}
                             >
-                              <Sparkles className="w-3 h-3 text-amber-400" />
-                              <span>Adiantar +Semanas</span>
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (confirm("Deseja realmente encerrar/excluir este contrato?")) {
-                                  deleteContract(c.id);
-                                }
-                              }}
-                              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-red-900/60 text-zinc-400 hover:text-red-300 transition"
-                              title="Excluir Contrato"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                              {c.status}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => handleOpenEditContract(c)}
+                                className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-blue-400 hover:text-blue-300 border border-zinc-700 transition"
+                                title="Editar Contrato (Valor, Vencimento, etc.)"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  generateWeeklyPaymentsForContract(c.id, 8);
+                                  setSuccessMessage(`Semanas futuras estendidas com sucesso para ${weekdayNames[c.dia_vencimento]}!`);
+                                  setTimeout(() => setSuccessMessage(null), 4000);
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-[11px] font-bold border border-zinc-700 transition flex items-center gap-1"
+                                title="O sistema já gera as parcelas automaticamente. Clique aqui apenas se desejar adiantar mais 2 meses de parcelas com antecedência."
+                              >
+                                <Sparkles className="w-3 h-3 text-amber-400" />
+                                <span>Adiantar +Semanas</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm("Deseja realmente encerrar/excluir este contrato?")) {
+                                    deleteContract(c.id);
+                                  }
+                                }}
+                                className="p-1.5 rounded-lg bg-zinc-800 hover:bg-red-900/60 text-zinc-400 hover:text-red-300 transition"
+                                title="Excluir Contrato"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -666,7 +768,9 @@ export default function MotoristasPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-md bg-zinc-900 border border-zinc-700 rounded-2xl p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-              <h3 className="text-base font-bold text-white">Criar Contrato de Locação Semanal</h3>
+              <h3 className="text-base font-bold text-white">
+                {editingContract ? "Editar Contrato de Locação Semanal" : "Criar Contrato de Locação Semanal"}
+              </h3>
               <button
                 onClick={() => setIsContractModalOpen(false)}
                 className="p-1 rounded-lg text-zinc-400 hover:text-white"
@@ -764,7 +868,9 @@ export default function MotoristasPage() {
               </div>
 
               <div className="p-3 bg-blue-950/40 border border-blue-800/80 rounded-xl text-[11px] text-blue-300">
-                ✨ As parcelas de pagamento semanais serão criadas automaticamente para o dia fixo da semana selecionado.
+                ✨ {editingContract 
+                  ? "Ao alterar o valor semanal, as parcelas pendentes futuras serão recalculadas automaticamente com o novo valor." 
+                  : "As parcelas de pagamento semanais serão criadas automaticamente para o dia fixo da semana selecionado."}
               </div>
 
               <div className="pt-3 border-t border-zinc-800 flex justify-end gap-2">
@@ -779,7 +885,7 @@ export default function MotoristasPage() {
                   type="submit"
                   className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold"
                 >
-                  Ativar Contrato Semanal
+                  {editingContract ? "Salvar Alterações do Contrato" : "Ativar Contrato Semanal"}
                 </button>
               </div>
             </form>
