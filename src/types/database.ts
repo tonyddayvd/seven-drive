@@ -151,7 +151,7 @@ export interface Expense {
   tipo: 'ipva' | 'seguro' | 'taxa' | 'licenciamento' | 'manutencao' | 'outros';
   valor: number;
   data_despesa: string;
-  descricao: string;
+  descricao?: string | null;
   comprovante_url?: string | null;
   created_at: string;
   // Joins

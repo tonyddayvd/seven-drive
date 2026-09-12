@@ -16,6 +16,7 @@ import {
   Wrench,
   ShieldAlert,
   ChevronRight,
+  Receipt,
 } from "lucide-react";
 
 export default function AdminDashboardPage() {
@@ -73,7 +74,15 @@ export default function AdminDashboardPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/admin/despesas"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold text-xs border border-zinc-700 transition"
+          >
+            <Receipt className="w-4 h-4 text-blue-400" />
+            <span>+ Lançar Custo / Seguro</span>
+          </Link>
+
           <Link
             href="/admin/conferencia"
             className="relative flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 transition"
@@ -112,18 +121,24 @@ export default function AdminDashboardPage() {
           </span>
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-sm">
+        <Link
+          href="/admin/despesas"
+          className="bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-2xl p-5 shadow-sm transition block group"
+        >
           <div className="flex items-center justify-between text-zinc-400 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Custos & Despesas</span>
-            <div className="p-2 bg-red-500/10 rounded-xl text-red-400">
+            <span className="text-xs font-semibold uppercase tracking-wider group-hover:text-white transition">
+              Custos & Despesas Extras
+            </span>
+            <div className="p-2 bg-red-500/10 rounded-xl text-red-400 group-hover:scale-105 transition">
               <TrendingDown className="w-4 h-4" />
             </div>
           </div>
           <div className="text-2xl font-black text-white">{formatCurrency(totalCustos)}</div>
-          <span className="text-xs text-zinc-500 mt-1 block">
-            Manutenções, multas e taxas
+          <span className="text-xs text-blue-400 group-hover:text-blue-300 mt-1 flex items-center gap-1 font-semibold">
+            <span>Seguros, IPVA e manutenções</span>
+            <ArrowUpRight className="w-3.5 h-3.5" />
           </span>
-        </div>
+        </Link>
 
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-sm">
           <div className="flex items-center justify-between text-zinc-400 mb-2">
@@ -217,7 +232,9 @@ export default function AdminDashboardPage() {
                       - {formatCurrency(financial.manutencoes)}
                     </td>
                     <td className="py-3.5 px-4 text-amber-400 font-semibold">
-                      - {formatCurrency(financial.multas + financial.despesas)}
+                      <Link href="/admin/despesas" className="hover:underline hover:text-amber-300" title="Ver custos e despesas">
+                        - {formatCurrency(financial.multas + financial.despesas)}
+                      </Link>
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <span

@@ -135,25 +135,25 @@ const SevenDriveContext = createContext<SevenDriveContextType | undefined>(undef
 
 export function SevenDriveProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<Profile>(initialProfiles[0]);
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(true); // Padrão autenticado no primeiro load
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(true);
   const [adminPassword, setAdminPasswordState] = useState<string>("admin123");
 
   const [profiles, setProfiles] = useState<Profile[]>(initialProfiles);
-  const [vehicles, setVehicles] = useState<Vehicle[]>(initialVehicles);
-  const [contracts, setContracts] = useState<Contract[]>(initialContracts);
-  const [payments, setPayments] = useState<Payment[]>(initialPayments);
-  const [inspections, setInspections] = useState<Inspection[]>(initialInspections);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [contracts, setContracts] = useState<Contract[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [inspections, setInspections] = useState<Inspection[]>([]);
   const [maintenanceRules, setMaintenanceRules] = useState<MaintenanceRule[]>(initialMaintenanceRules);
-  const [maintenances, setMaintenances] = useState<Maintenance[]>(initialMaintenances);
-  const [fines, setFines] = useState<Fine[]>(initialFines);
-  const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
+  const [maintenances, setMaintenances] = useState<Maintenance[]>([]);
+  const [fines, setFines] = useState<Fine[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [settings, setSettings] = useState<SystemSettings>(initialSettings);
   const [activeAlerts, setActiveAlerts] = useState<AlertItem[]>([]);
 
   // Sincronização em Nuvem (Supabase) + Fallback LocalStorage
   const [isCloudLoaded, setIsCloudLoaded] = useState(false);
 
-  // 1. Carrega dados do Supabase na inicialização; se o Supabase estiver vazio e houver dados locais, sobe para a nuvem
+  // 1. Carrega dados do Supabase na inicialização; Supabase é a fonte oficial da verdade
   useEffect(() => {
     async function loadData() {
       const supabase = createClient();
@@ -181,21 +181,23 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
           supabase.from("system_settings").select("*"),
         ]);
 
-        const hasCloudData = cloudVehicles && cloudVehicles.length > 0;
-
-        if (hasCloudData) {
-          // O Supabase tem dados: eles são a fonte oficial de verdade para celular, PC e todos os dispositivos!
-          if (cloudVehicles) setVehicles(cloudVehicles);
-          if (cloudProfiles && cloudProfiles.length > 0) setProfiles(cloudProfiles);
-          if (cloudContracts) setContracts(cloudContracts);
-          if (cloudPayments) setPayments(cloudPayments);
-          if (cloudInspections) setInspections(cloudInspections);
-          if (cloudMaintenances) setMaintenances(cloudMaintenances);
-          if (cloudFines) setFines(cloudFines);
-          if (cloudExpenses) setExpenses(cloudExpenses);
+        if (cloudVehicles !== null) {
+          // Dados retornados do Supabase com sucesso
+          setVehicles(cloudVehicles || []);
+          if (cloudProfiles && cloudProfiles.length > 0) {
+            setProfiles(cloudProfiles);
+          } else {
+            setProfiles(initialProfiles);
+          }
+          setContracts(cloudContracts || []);
+          setPayments(cloudPayments || []);
+          setInspections(cloudInspections || []);
+          setMaintenances(cloudMaintenances || []);
+          setFines(cloudFines || []);
+          setExpenses(cloudExpenses || []);
           if (cloudSettings && cloudSettings.length > 0) setSettings(cloudSettings[0] as any);
         } else {
-          // Nuvem ainda vazia: verifica se este dispositivo tem dados cadastrados no localStorage
+          // Fallback somente se offline / sem conexão com o Supabase
           if (typeof window !== "undefined") {
             const savedVehicles = localStorage.getItem("sevendrive_vehicles");
             const savedProfiles = localStorage.getItem("sevendrive_profiles");
@@ -207,42 +209,15 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
             const savedExpenses = localStorage.getItem("sevendrive_expenses");
             const savedSettings = localStorage.getItem("sevendrive_settings");
 
-            const localVehicles = savedVehicles ? JSON.parse(savedVehicles) : null;
-            const localProfiles = savedProfiles ? JSON.parse(savedProfiles) : null;
-            const localContracts = savedContracts ? JSON.parse(savedContracts) : null;
-            const localPayments = savedPayments ? JSON.parse(savedPayments) : null;
-            const localInspections = savedInspections ? JSON.parse(savedInspections) : null;
-            const localMaintenances = savedMaintenances ? JSON.parse(savedMaintenances) : null;
-            const localFines = savedFines ? JSON.parse(savedFines) : null;
-            const localExpenses = savedExpenses ? JSON.parse(savedExpenses) : null;
-            const localSettings = savedSettings ? JSON.parse(savedSettings) : null;
-
-            if (localVehicles && localVehicles.length > 0) {
-              setVehicles(localVehicles);
-              if (localProfiles) setProfiles(localProfiles);
-              if (localContracts) setContracts(localContracts);
-              if (localPayments) setPayments(localPayments);
-              if (localInspections) setInspections(localInspections);
-              if (localMaintenances) setMaintenances(localMaintenances);
-              if (localFines) setFines(localFines);
-              if (localExpenses) setExpenses(localExpenses);
-              if (localSettings) setSettings(localSettings);
-
-              // Faz o upload inicial automático (Seed) dos dados deste dispositivo para o Supabase!
-              try {
-                if (localProfiles?.length) await supabase.from("profiles").upsert(localProfiles);
-                if (localVehicles?.length) await supabase.from("vehicles").upsert(localVehicles);
-                if (localContracts?.length) await supabase.from("contracts").upsert(localContracts);
-                if (localPayments?.length) await supabase.from("payments").upsert(localPayments);
-                if (localInspections?.length) await supabase.from("inspections").upsert(localInspections);
-                if (localMaintenances?.length) await supabase.from("maintenances").upsert(localMaintenances);
-                if (localFines?.length) await supabase.from("fines").upsert(localFines);
-                if (localExpenses?.length) await supabase.from("expenses").upsert(localExpenses);
-                if (localSettings) await supabase.from("system_settings").upsert([localSettings]);
-              } catch (seedErr) {
-                console.warn("Aviso ao semear Supabase:", seedErr);
-              }
-            }
+            if (savedVehicles) setVehicles(JSON.parse(savedVehicles));
+            if (savedProfiles) setProfiles(JSON.parse(savedProfiles));
+            if (savedContracts) setContracts(JSON.parse(savedContracts));
+            if (savedPayments) setPayments(JSON.parse(savedPayments));
+            if (savedInspections) setInspections(JSON.parse(savedInspections));
+            if (savedMaintenances) setMaintenances(JSON.parse(savedMaintenances));
+            if (savedFines) setFines(JSON.parse(savedFines));
+            if (savedExpenses) setExpenses(JSON.parse(savedExpenses));
+            if (savedSettings) setSettings(JSON.parse(savedSettings));
           }
         }
       } catch (err) {
@@ -443,15 +418,31 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     );
   };
 
-  const deleteVehicle = (id: string) => {
+  const deleteVehicle = async (id: string) => {
     setVehicles((prev) => prev.filter((v) => v.id !== id));
-    // Limpeza em cascata de tudo que pertencia a este veículo:
+    // Limpeza em cascata de tudo que pertencia a este veículo no state
     setContracts((prev) => prev.filter((c) => c.vehicle_id !== id));
     setPayments((prev) => prev.filter((p) => p.vehicle_id !== id));
     setInspections((prev) => prev.filter((i) => i.vehicle_id !== id));
     setMaintenances((prev) => prev.filter((m) => m.vehicle_id !== id));
     setFines((prev) => prev.filter((f) => f.vehicle_id !== id));
     setExpenses((prev) => prev.filter((e) => e.vehicle_id !== id));
+
+    // Exclusão definitiva em cascata no Supabase
+    try {
+      const supabase = createClient();
+      await Promise.allSettled([
+        supabase.from("expenses").delete().eq("vehicle_id", id),
+        supabase.from("fines").delete().eq("vehicle_id", id),
+        supabase.from("maintenances").delete().eq("vehicle_id", id),
+        supabase.from("inspections").delete().eq("vehicle_id", id),
+        supabase.from("payments").delete().eq("vehicle_id", id),
+        supabase.from("contracts").delete().eq("vehicle_id", id),
+        supabase.from("vehicles").delete().eq("id", id),
+      ]);
+    } catch (err) {
+      console.error("Erro ao deletar veículo no Supabase:", err);
+    }
   };
 
   // Motoristas
@@ -471,10 +462,22 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     );
   };
 
-  const deleteDriver = (id: string) => {
+  const deleteDriver = async (id: string) => {
     setProfiles((prev) => prev.filter((p) => p.id !== id));
     setContracts((prev) => prev.filter((c) => c.driver_id !== id));
     setPayments((prev) => prev.filter((p) => p.driver_id !== id));
+
+    // Exclusão definitiva no Supabase
+    try {
+      const supabase = createClient();
+      await Promise.allSettled([
+        supabase.from("payments").delete().eq("driver_id", id),
+        supabase.from("contracts").delete().eq("driver_id", id),
+        supabase.from("profiles").delete().eq("id", id),
+      ]);
+    } catch (err) {
+      console.error("Erro ao deletar motorista no Supabase:", err);
+    }
   };
 
   // Contratos & Geração Semanal de Pagamentos
@@ -501,8 +504,14 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     );
   };
 
-  const deleteContract = (id: string) => {
+  const deleteContract = async (id: string) => {
     setContracts((prev) => prev.filter((c) => c.id !== id));
+    try {
+      const supabase = createClient();
+      await supabase.from("contracts").delete().eq("id", id);
+    } catch (err) {
+      console.error("Erro ao deletar contrato no Supabase:", err);
+    }
   };
 
   // Garante que existam parcelas geradas continuamente para as próximas semanas
@@ -596,8 +605,14 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     );
   };
 
-  const deletePayment = (id: string) => {
+  const deletePayment = async (id: string) => {
     setPayments((prev) => prev.filter((p) => p.id !== id));
+    try {
+      const supabase = createClient();
+      await supabase.from("payments").delete().eq("id", id);
+    } catch (err) {
+      console.error("Erro ao deletar pagamento no Supabase:", err);
+    }
   };
 
   // Wizard do Locatário
@@ -718,8 +733,14 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     }
   };
 
-  const deleteMaintenance = (id: string) => {
+  const deleteMaintenance = async (id: string) => {
     setMaintenances((prev) => prev.filter((m) => m.id !== id));
+    try {
+      const supabase = createClient();
+      await supabase.from("maintenances").delete().eq("id", id);
+    } catch (err) {
+      console.error("Erro ao deletar manutenção no Supabase:", err);
+    }
   };
 
   // Multas
@@ -736,22 +757,41 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     setFines((prev) => prev.map((f) => (f.id === id ? { ...f, ...updates } : f)));
   };
 
-  const deleteFine = (id: string) => {
+  const deleteFine = async (id: string) => {
     setFines((prev) => prev.filter((f) => f.id !== id));
+    try {
+      const supabase = createClient();
+      await supabase.from("fines").delete().eq("id", id);
+    } catch (err) {
+      console.error("Erro ao deletar multa no Supabase:", err);
+    }
   };
 
-  // Despesas
-  const addExpense = (expData: Omit<Expense, "id" | "created_at">) => {
+  // Despesas (Custos Extras: Seguro, IPVA, Licenciamento, etc.)
+  const addExpense = async (expData: Omit<Expense, "id" | "created_at">) => {
     const newExp: Expense = {
       ...expData,
       id: `exp-${Date.now()}`,
       created_at: new Date().toISOString(),
     };
     setExpenses((prev) => [newExp, ...prev]);
+
+    try {
+      const supabase = createClient();
+      await supabase.from("expenses").insert([newExp]);
+    } catch (err) {
+      console.error("Erro ao salvar despesa no Supabase:", err);
+    }
   };
 
-  const deleteExpense = (id: string) => {
+  const deleteExpense = async (id: string) => {
     setExpenses((prev) => prev.filter((e) => e.id !== id));
+    try {
+      const supabase = createClient();
+      await supabase.from("expenses").delete().eq("id", id);
+    } catch (err) {
+      console.error("Erro ao deletar despesa no Supabase:", err);
+    }
   };
 
   // Configurações

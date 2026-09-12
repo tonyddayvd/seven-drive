@@ -10,6 +10,7 @@ import {
   Bell,
   Wrench,
   DollarSign,
+  Receipt,
   FileCheck,
   AlertTriangle,
   FileText,
@@ -66,6 +67,7 @@ export function Navbar() {
     { href: "/admin/veiculos", label: "Veículos & CRLV", icon: Car },
     { href: "/admin/motoristas", label: "Motoristas & CNH", icon: UserCheck },
     { href: "/admin/pagamentos", label: "Gestão Financeira", icon: DollarSign },
+    { href: "/admin/despesas", label: "Custos & Despesas", icon: Receipt },
     {
       href: "/admin/manutencoes",
       label: "Revisões & KM",
