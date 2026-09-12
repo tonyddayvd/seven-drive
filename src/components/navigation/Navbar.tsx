@@ -24,6 +24,7 @@ import {
   Check,
   LogOut,
   ExternalLink,
+  Download,
 } from "lucide-react";
 
 export function Navbar() {
@@ -40,6 +41,36 @@ export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [alertDropdownOpen, setAlertDropdownOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isStandalone, setIsStandalone] = useState(false);
+
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const isApp =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        (window.navigator as any).standalone === true;
+      setIsStandalone(isApp);
+
+      const handlePrompt = (e: Event) => {
+        e.preventDefault();
+        setDeferredPrompt(e);
+      };
+      window.addEventListener("beforeinstallprompt", handlePrompt);
+      return () => window.removeEventListener("beforeinstallprompt", handlePrompt);
+    }
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === "accepted") {
+        setDeferredPrompt(null);
+      }
+    } else {
+      alert("Para adicionar à área de trabalho/tela de início:\n\n• No Chrome/Edge (PC ou Celular): Clique no menu (três pontinhos) e escolha 'Instalar aplicativo' ou 'Adicionar à tela inicial'.\n• No iPhone/iPad (Safari): Toque no botão 'Compartilhar' e depois em 'Adicionar à Tela de Início'.");
+    }
+  };
 
   // Verifica se está na área do motorista ou do administrador
   const isMotoristaRoute = pathname.startsWith("/motorista");
@@ -111,10 +142,14 @@ export function Navbar() {
           <div className="flex items-center gap-6">
             <Link
               href={isMotoristaRoute ? "/motorista" : "/admin"}
-              className="flex items-center gap-2.5 group"
+              className="flex items-center gap-3 group"
             >
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-blue-600/30 group-hover:scale-105 transition">
-                <Car className="w-5 h-5" />
+              <div className="w-10 h-10 rounded-xl overflow-hidden shadow-lg shadow-blue-900/40 border border-zinc-700/80 bg-zinc-950 p-0.5 group-hover:scale-105 transition shrink-0 flex items-center justify-center">
+                <img
+                  src="/icon-192.png"
+                  alt="Seven Drive"
+                  className="w-full h-full object-contain rounded-lg"
+                />
               </div>
               <div>
                 <div className="flex items-center gap-2">
@@ -171,6 +206,19 @@ export function Navbar() {
 
           {/* Área Direita */}
           <div className="flex items-center gap-2.5">
+            {/* Botão de Instalação do App / Atalho */}
+            {!isStandalone && (
+              <button
+                type="button"
+                onClick={handleInstallApp}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-md shadow-blue-600/30 transition active:scale-95 border border-blue-400/30"
+                title="Instalar Seven Drive na área de trabalho ou celular como App"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Instalar App</span>
+              </button>
+            )}
+
             {/* Apenas na Área do Administrador: Botão Copiar Link do Motorista */}
             {!isMotoristaRoute && (
               <button
