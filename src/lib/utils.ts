@@ -22,6 +22,13 @@ export function formatKM(value: number | null | undefined): string {
 export function formatDate(dateString: string | null | undefined): string {
   if (!dateString) return "-";
   try {
+    const clean = String(dateString).trim();
+    // Prioriza extração direta YYYY-MM-DD para evitar perda de 1 dia por fuso horário UTC
+    const match = clean.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      const [, year, month, day] = match;
+      return `${day}/${month}/${year}`;
+    }
     const d = new Date(dateString);
     if (isNaN(d.getTime())) return dateString;
     return d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
@@ -33,12 +40,39 @@ export function formatDate(dateString: string | null | undefined): string {
 export function formatDateTime(dateString: string | null | undefined): string {
   if (!dateString) return "-";
   try {
+    const clean = String(dateString).trim();
+    // Se for formato ISO com hora zerada (ex: 2026-09-11T00:00:00+00:00), formata como data direta
+    if (/^\d{4}-\d{2}-\d{2}(T00:00(:00)?(\.000)?(Z|\+00:00)?)?$/.test(clean)) {
+      return formatDate(clean);
+    }
     const d = new Date(dateString);
     if (isNaN(d.getTime())) return dateString;
     return d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
   } catch {
     return dateString;
   }
+}
+
+/**
+ * Regra de Negócio Seven Drive:
+ * O locatário tem até o fim do dia de vencimento (segunda-feira) para efetuar o pagamento.
+ * Só é considerado atrasado a partir do dia seguinte (terça-feira).
+ */
+export function isPaymentLate(dueDateString: string, status: string): boolean {
+  if (status === "confirmado" || status === "pendente_conferencia") return false;
+  if (!dueDateString) return false;
+
+  const cleanDue = dueDateString.split("T")[0];
+  
+  // Data atual no horário de Brasília (YYYY-MM-DD)
+  const now = new Date();
+  const spYear = now.toLocaleString("en-US", { timeZone: "America/Sao_Paulo", year: "numeric" });
+  const spMonth = now.toLocaleString("en-US", { timeZone: "America/Sao_Paulo", month: "2-digit" });
+  const spDay = now.toLocaleString("en-US", { timeZone: "America/Sao_Paulo", day: "2-digit" });
+  const todayStr = `${spYear}-${spMonth}-${spDay}`;
+
+  // Se a data de hoje for maior que a data de vencimento (ex: terça > segunda), está em atraso
+  return todayStr > cleanDue;
 }
 
 export function formatPlate(plate: string | null | undefined): string {

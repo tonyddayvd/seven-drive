@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useSevenDrive } from "@/lib/store";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, isPaymentLate } from "@/lib/utils";
 import { CheckCircle2, AlertCircle, Clock, Calendar, Car } from "lucide-react";
 
 export function WeeklyTimeline() {
@@ -118,7 +118,9 @@ export function WeeklyTimeline() {
             return p.data_vencimento >= week.startDate && p.data_vencimento <= week.endDate;
           });
 
-          const hasOverdue = weekPayments.some((p) => p.status === "atrasado");
+          const hasOverdue = weekPayments.some(
+            (p) => p.status === "atrasado" || (p.status === "pendente_envio" && isPaymentLate(p.data_vencimento, p.status))
+          );
           const hasPending = weekPayments.some(
             (p) => p.status === "pendente_envio" || p.status === "pendente_conferencia"
           );

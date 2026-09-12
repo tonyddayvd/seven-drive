@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useSevenDrive } from "@/lib/store";
-import { formatCurrency, formatKM, formatDate, formatPlate } from "@/lib/utils";
+import { formatCurrency, formatKM, formatDate, formatPlate, isPaymentLate } from "@/lib/utils";
 import {
   Car,
   CreditCard,
@@ -177,21 +177,31 @@ export default function MotoristaPage() {
               </h3>
             </div>
 
-            <span
-              className={`text-xs font-bold px-3 py-1 rounded-full border ${
-                currentPayment.status === "confirmado"
-                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                  : currentPayment.status === "pendente_conferencia"
-                  ? "bg-blue-500/10 text-blue-400 border-blue-500/20 animate-pulse"
-                  : "bg-amber-500/10 text-amber-400 border-amber-500/20"
-              }`}
-            >
-              {currentPayment.status === "confirmado"
-                ? "Quitado / Aprovado"
-                : currentPayment.status === "pendente_conferencia"
-                ? "Em Conferência pelo Locador"
-                : "Aguardando Pagamento"}
-            </span>
+            {(() => {
+              const isLate = currentPayment.status === "atrasado" || (currentPayment.status === "pendente_envio" && isPaymentLate(currentPayment.data_vencimento, currentPayment.status));
+
+              return (
+                <span
+                  className={`text-xs font-bold px-3 py-1 rounded-full border ${
+                    currentPayment.status === "confirmado"
+                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                      : currentPayment.status === "pendente_conferencia"
+                      ? "bg-blue-500/10 text-blue-400 border-blue-500/20 animate-pulse"
+                      : isLate
+                      ? "bg-red-500/10 text-red-400 border-red-500/20 animate-pulse"
+                      : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                  }`}
+                >
+                  {currentPayment.status === "confirmado"
+                    ? "Quitado / Aprovado"
+                    : currentPayment.status === "pendente_conferencia"
+                    ? "Em Conferência pelo Locador"
+                    : isLate
+                    ? "Em Atraso (Regularize Agora)"
+                    : "Aguardando Pagamento"}
+                </span>
+              );
+            })()}
           </div>
 
           <div className="flex justify-between items-center p-4 rounded-xl bg-zinc-950 border border-zinc-800">

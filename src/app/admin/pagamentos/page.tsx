@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useSevenDrive } from "@/lib/store";
 import { Payment } from "@/types/database";
-import { formatCurrency, formatDate, formatPlate } from "@/lib/utils";
+import { formatCurrency, formatDate, formatPlate, isPaymentLate } from "@/lib/utils";
 import {
   DollarSign,
   Plus,
@@ -207,27 +207,40 @@ export default function PagamentosPage() {
                       {p.data_pagamento ? formatDate(p.data_pagamento) : "-"}
                     </td>
                     <td className="py-3.5 px-4">
-                      <span
-                        className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full border ${
-                          p.status === "confirmado"
-                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                            : p.status === "pendente_conferencia"
-                            ? "bg-blue-500/10 text-blue-400 border-blue-500/20 animate-pulse"
-                            : p.status === "atrasado"
-                            ? "bg-red-500/10 text-red-400 border-red-500/20"
-                            : "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                        }`}
-                      >
-                        {p.status === "confirmado" && <CheckCircle2 className="w-3 h-3" />}
-                        {p.status === "pendente_conferencia" && <Clock className="w-3 h-3" />}
-                        {p.status === "confirmado"
-                          ? "Confirmado"
-                          : p.status === "pendente_conferencia"
-                          ? "Conferência"
-                          : p.status === "atrasado"
-                          ? "Atrasado"
-                          : "Pendente"}
-                      </span>
+                      {(() => {
+                        const isLate = p.status === "atrasado" || (p.status === "pendente_envio" && isPaymentLate(p.data_vencimento, p.status));
+                        const currentStatus = p.status === "confirmado" 
+                          ? "confirmado" 
+                          : p.status === "pendente_conferencia" 
+                          ? "pendente_conferencia" 
+                          : isLate 
+                          ? "atrasado" 
+                          : "pendente_envio";
+
+                        return (
+                          <span
+                            className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                              currentStatus === "confirmado"
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                : currentStatus === "pendente_conferencia"
+                                ? "bg-blue-500/10 text-blue-400 border-blue-500/20 animate-pulse"
+                                : currentStatus === "atrasado"
+                                ? "bg-red-500/10 text-red-400 border-red-500/20"
+                                : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                            }`}
+                          >
+                            {currentStatus === "confirmado" && <CheckCircle2 className="w-3 h-3" />}
+                            {currentStatus === "pendente_conferencia" && <Clock className="w-3 h-3" />}
+                            {currentStatus === "confirmado"
+                              ? "Confirmado"
+                              : currentStatus === "pendente_conferencia"
+                              ? "Conferência"
+                              : currentStatus === "atrasado"
+                              ? "Atrasado"
+                              : "Pendente"}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
