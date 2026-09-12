@@ -18,6 +18,7 @@ export default function MotoristaManutencaoPage() {
   const router = useRouter();
   const {
     currentUser,
+    profiles,
     vehicles,
     contracts,
     maintenanceRules,
@@ -25,8 +26,9 @@ export default function MotoristaManutencaoPage() {
     triggerBrowserNotification,
   } = useSevenDrive();
 
-  const contract = contracts.find((c) => c.driver_id === currentUser.id && c.status === "ativo");
-  const vehicle = vehicles.find((v) => v.id === contract?.vehicle_id);
+  const activeDriver = profiles.find((p) => p.role === "driver" && (p.id === currentUser.id || currentUser.role !== "driver")) || currentUser;
+  const contract = contracts.find((c) => c.driver_id === activeDriver.id && c.status === "ativo") || contracts[0];
+  const vehicle = vehicles.find((v) => v.id === contract?.vehicle_id) || vehicles[0];
 
   const [tipoItem, setTipoItem] = useState(maintenanceRules[0]?.nome_item || "Troca de Óleo");
   const [kmRealizado, setKmRealizado] = useState(vehicle ? vehicle.km_atual : 38000);

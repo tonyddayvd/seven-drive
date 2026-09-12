@@ -6,9 +6,10 @@ import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 import { History, CheckCircle2, Clock, FileText, AlertCircle } from "lucide-react";
 
 export default function MotoristaHistoricoPage() {
-  const { currentUser, payments } = useSevenDrive();
+  const { currentUser, profiles, payments } = useSevenDrive();
 
-  const driverPayments = payments.filter((p) => p.driver_id === currentUser.id);
+  const activeDriver = profiles.find((p) => p.role === "driver" && (p.id === currentUser.id || currentUser.role !== "driver")) || currentUser;
+  const driverPayments = payments.filter((p) => p.driver_id === activeDriver.id || p.driver_id === currentUser.id);
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">

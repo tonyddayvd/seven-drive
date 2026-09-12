@@ -9,32 +9,46 @@ export function WeeklyTimeline() {
   const { payments, vehicles, contracts } = useSevenDrive();
   const [selectedVehicle, setSelectedVehicle] = useState<string>("all");
 
-  // Filtra por veículo selecionado
-  const filteredPayments = selectedVehicle === "all"
-    ? payments
-    : payments.filter((p) => p.vehicle_id === selectedVehicle);
+  const existingVehicleIds = new Set(vehicles.map((v) => v.id));
 
-  // Semanas simuladas cobrindo período atual (Setembro/2026)
+  // Filtra por veículo selecionado E apenas veículos que realmente existem
+  const filteredPayments = payments
+    .filter((p) => existingVehicleIds.has(p.vehicle_id))
+    .filter((p) => selectedVehicle === "all" || p.vehicle_id === selectedVehicle);
+
+  // Semanas dinâmicas de Setembro e Outubro
   const weeks = [
     {
-      id: "2026-35",
-      label: "Semana 35 (24/08 a 30/08)",
-      range: "24/08 - 30/08",
-    },
-    {
-      id: "2026-36",
-      label: "Semana 36 (31/08 a 06/09)",
-      range: "31/08 - 06/09",
-    },
-    {
       id: "2026-37",
-      label: "Semana 37 (07/09 a 13/09) - Atual",
+      label: "Semana 37 (07/09 a 13/09)",
       range: "07/09 - 13/09",
+      startDate: "2026-09-07",
+      endDate: "2026-09-13",
+      isCurrent: true,
     },
     {
       id: "2026-38",
       label: "Semana 38 (14/09 a 20/09)",
       range: "14/09 - 20/09",
+      startDate: "2026-09-14",
+      endDate: "2026-09-20",
+      isCurrent: false,
+    },
+    {
+      id: "2026-39",
+      label: "Semana 39 (21/09 a 27/09)",
+      range: "21/09 - 27/09",
+      startDate: "2026-09-21",
+      endDate: "2026-09-27",
+      isCurrent: false,
+    },
+    {
+      id: "2026-40",
+      label: "Semana 40 (28/09 a 04/10)",
+      range: "28/09 - 04/10",
+      startDate: "2026-09-28",
+      endDate: "2026-10-04",
+      isCurrent: false,
     },
   ];
 
@@ -47,7 +61,7 @@ export function WeeklyTimeline() {
             Linha do Tempo Semanal de Pagamentos
           </h2>
           <p className="text-xs text-zinc-400 mt-0.5">
-            Status consolidado das semanas de locação de cada veículo
+            Status consolidado das semanas de locação com dia fixo de vencimento
           </p>
         </div>
 
@@ -59,7 +73,7 @@ export function WeeklyTimeline() {
             onChange={(e) => setSelectedVehicle(e.target.value)}
             className="bg-zinc-800 border border-zinc-700 text-xs text-white rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="all">Todos os Veículos</option>
+            <option value="all">Todos os Veículos ({vehicles.length})</option>
             {vehicles.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.placa} - {v.marca} {v.modelo}
@@ -78,7 +92,7 @@ export function WeeklyTimeline() {
         </div>
         <div className="flex items-center gap-1.5 text-amber-400">
           <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
-          <span>🟡 Semana Atual / A Vencer (1 a 2 dias)</span>
+          <span>🟡 Semana Atual / A Vencer</span>
         </div>
         <div className="flex items-center gap-1.5 text-red-400">
           <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
@@ -89,11 +103,13 @@ export function WeeklyTimeline() {
       {/* Grid de Semanas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {weeks.map((week) => {
-          const weekPayments = filteredPayments.filter(
-            (p) => p.semana_ano === week.id || (p.data_vencimento >= "2026-09-07" && week.id === "2026-37")
-          );
+          const weekPayments = filteredPayments.filter((p) => {
+            if (p.semana_ano && (p.semana_ano === week.id || p.semana_ano.endsWith(week.id.split("-")[1]))) {
+              return true;
+            }
+            return p.data_vencimento >= week.startDate && p.data_vencimento <= week.endDate;
+          });
 
-          // Determina o status da semana
           const hasOverdue = weekPayments.some((p) => p.status === "atrasado");
           const hasPending = weekPayments.some(
             (p) => p.status === "pendente_envio" || p.status === "pendente_conferencia"
@@ -106,7 +122,7 @@ export function WeeklyTimeline() {
             statusType = "red";
           } else if (allConfirmed) {
             statusType = "green";
-          } else if (hasPending) {
+          } else if (hasPending || week.isCurrent) {
             statusType = "yellow";
           }
 
@@ -136,7 +152,9 @@ export function WeeklyTimeline() {
                 <span
                   className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${badgeColors[statusType]}`}
                 >
-                  {statusType === "green"
+                  {weekPayments.length === 0
+                    ? "Sem Lançamento"
+                    : statusType === "green"
                     ? "Confirmada"
                     : statusType === "red"
                     ? "Em Atraso"
@@ -144,7 +162,10 @@ export function WeeklyTimeline() {
                 </span>
               </div>
 
-              <h3 className="text-sm font-bold text-white mb-2">{week.label.split(" (")[0]}</h3>
+              <h3 className="text-sm font-bold text-white mb-2">
+                {week.label.split(" (")[0]}
+                {week.isCurrent && <span className="text-[10px] text-blue-400 font-normal ml-1.5">(Atual)</span>}
+              </h3>
 
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between text-zinc-400">
@@ -154,7 +175,7 @@ export function WeeklyTimeline() {
 
                 <div className="border-t border-zinc-800/80 pt-2 mt-2 space-y-1.5">
                   {weekPayments.length === 0 ? (
-                    <p className="text-[11px] text-zinc-500 italic">Nenhum pagamento agendado</p>
+                    <p className="text-[11px] text-zinc-500 italic">Nenhum pagamento nesta semana</p>
                   ) : (
                     weekPayments.map((p) => {
                       const veh = vehicles.find((v) => v.id === p.vehicle_id);

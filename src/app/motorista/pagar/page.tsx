@@ -22,6 +22,7 @@ export default function PagarWizardPage() {
   const router = useRouter();
   const {
     currentUser,
+    profiles,
     payments,
     settings,
     vehicles,
@@ -29,12 +30,17 @@ export default function PagarWizardPage() {
     submitPaymentAndInspection,
   } = useSevenDrive();
 
+  // Encontra o motorista ativo dinamicamente (se logado como motorista ou o primeiro motorista real cadastrado)
+  const activeDriver = profiles.find((p) => p.role === "driver" && (p.id === currentUser.id || currentUser.role !== "driver")) || currentUser;
+
+  // Busca o contrato e veículo ativo do motorista
+  const activeContract = contracts.find((c) => c.driver_id === activeDriver.id && c.status === "ativo") || contracts[0];
+  const vehicle = vehicles.find((v) => v.id === activeContract?.vehicle_id) || vehicles[0];
+
   // Busca o pagamento em aberto do motorista
   const currentPayment = payments.find(
-    (p) => p.driver_id === currentUser.id && p.status === "pendente_envio"
-  ) || payments.find((p) => p.driver_id === currentUser.id);
-
-  const vehicle = vehicles.find((v) => v.id === currentPayment?.vehicle_id);
+    (p) => (p.driver_id === activeDriver.id || p.vehicle_id === vehicle?.id) && (p.status === "pendente_envio" || p.status === "pendente_conferencia" || p.status === "atrasado")
+  ) || payments.find((p) => p.driver_id === activeDriver.id || p.vehicle_id === vehicle?.id) || payments[0];
 
   // Estados do Wizard
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);

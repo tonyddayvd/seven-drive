@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { useSevenDrive } from "@/lib/store";
 import { formatCurrency, formatKM, formatDate, formatPlate } from "@/lib/utils";
@@ -15,47 +15,90 @@ import {
   ArrowRight,
   ShieldCheck,
   FileText,
+  User,
 } from "lucide-react";
 
 export default function MotoristaPage() {
   const {
     currentUser,
+    profiles,
     vehicles,
     contracts,
     payments,
     activeAlerts,
   } = useSevenDrive();
 
-  // Encontra o contrato ativo do motorista
-  const contract = contracts.find(
-    (c) => c.driver_id === currentUser.id && c.status === "ativo"
-  );
-  const vehicle = vehicles.find((v) => v.id === contract?.vehicle_id);
+  const driversList = profiles.filter((p) => p.role === "driver");
 
-  // Encontra o pagamento mais recente / pendente
+  // Identifica o motorista ativo (se for motorista usa ele; se for o locador testando, usa o primeiro motorista cadastrado)
+  const [selectedDriverId, setSelectedDriverId] = useState<string>(
+    currentUser.role === "driver" ? currentUser.id : driversList[0]?.id || ""
+  );
+
+  const activeDriver = profiles.find((p) => p.id === selectedDriverId) || driversList[0] || currentUser;
+
+  // Encontra o contrato ativo deste motorista
+  const contract = contracts.find(
+    (c) => c.driver_id === activeDriver.id && c.status === "ativo"
+  ) || contracts[0];
+
+  const vehicle = vehicles.find((v) => v.id === contract?.vehicle_id) || vehicles[0];
+
+  // Encontra o pagamento mais recente / pendente deste contrato
   const currentPayment = payments
-    .filter((p) => p.driver_id === currentUser.id)
+    .filter((p) => (contract && p.contract_id === contract.id) || p.driver_id === activeDriver.id)
     .sort((a, b) => new Date(b.data_vencimento).getTime() - new Date(a.data_vencimento).getTime())[0];
 
   const vehicleAlerts = activeAlerts.filter((a) => a.vehicleId === vehicle?.id);
 
+  const weekdayNames: { [key: number]: string } = {
+    1: "Segunda-feira",
+    2: "Terça-feira",
+    3: "Quarta-feira",
+    4: "Quinta-feira",
+    5: "Sexta-feira",
+    6: "Sábado",
+    7: "Domingo",
+  };
+
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
+      {/* Seletor de Motorista se houver mais de um na frota */}
+      {driversList.length > 1 && (
+        <div className="flex items-center justify-between p-3 bg-zinc-900 border border-zinc-800 rounded-2xl text-xs">
+          <span className="text-zinc-400 font-semibold flex items-center gap-1.5">
+            <User className="w-3.5 h-3.5 text-emerald-400" />
+            Motorista Conectado:
+          </span>
+          <select
+            value={selectedDriverId}
+            onChange={(e) => setSelectedDriverId(e.target.value)}
+            className="bg-zinc-800 border border-zinc-700 text-white rounded-lg px-2.5 py-1 font-bold text-xs"
+          >
+            {driversList.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.full_name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Boas-vindas */}
       <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 rounded-3xl p-6 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
-            <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
               Portal do Locatário
             </span>
             <h1 className="text-xl font-black text-white mt-0.5">
-              Olá, {currentUser.full_name.split(" ")[0]}!
+              Olá, {activeDriver.full_name.split(" ")[0]}!
             </h1>
             <p className="text-xs text-zinc-400 mt-1">
-              Gerencie suas locações, pagamentos com vistoria e revisões preventivas.
+              Gerencie seu veículo alugado, envie comprovantes e realize vistorias com foto.
             </p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-blue-600/10 border border-blue-500/20 text-blue-400 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
             <Car className="w-6 h-6" />
           </div>
         </div>
@@ -67,7 +110,7 @@ export default function MotoristaPage() {
           <div className="flex items-start justify-between">
             <div>
               <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-                Seu Veículo Atual
+                Seu Veículo Vinculado
               </span>
               <h2 className="text-lg font-bold text-white">
                 {vehicle.marca} {vehicle.modelo}
@@ -96,9 +139,14 @@ export default function MotoristaPage() {
                 Valor do Aluguel
               </span>
               <span className="text-base font-bold text-white">
-                {formatCurrency(contract?.valor_aluguel)}
+                {formatCurrency(contract?.valor_aluguel || 650)}
                 <span className="text-[10px] text-zinc-400 font-normal"> /semana</span>
               </span>
+              {contract?.dia_vencimento && (
+                <span className="text-[10px] text-emerald-400 block mt-0.5 font-semibold">
+                  Toda {weekdayNames[contract.dia_vencimento]}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -109,12 +157,12 @@ export default function MotoristaPage() {
       )}
 
       {/* Status do Próximo Pagamento & Ação Principal */}
-      {currentPayment && (
+      {currentPayment ? (
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-5">
           <div className="flex items-center justify-between">
             <div>
               <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                Status do Aluguel
+                Status do Aluguel Semanal
               </span>
               <h3 className="text-base font-bold text-white mt-0.5">
                 Vencimento: {formatDate(currentPayment.data_vencimento)}
@@ -133,7 +181,7 @@ export default function MotoristaPage() {
               {currentPayment.status === "confirmado"
                 ? "Quitado / Aprovado"
                 : currentPayment.status === "pendente_conferencia"
-                ? "Em Análise pelo Locador"
+                ? "Em Conferência pelo Locador"
                 : "Aguardando Pagamento"}
             </span>
           </div>
@@ -172,6 +220,17 @@ export default function MotoristaPage() {
             )}
           </div>
         </div>
+      ) : (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 text-center">
+          <p className="text-xs text-zinc-400 mb-3">Nenhum pagamento pendente no momento.</p>
+          <Link
+            href="/motorista/pagar"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs"
+          >
+            <CreditCard className="w-4 h-4" />
+            <span>Fazer Pagamento Antecipado</span>
+          </Link>
+        </div>
       )}
 
       {/* Ações Secundárias do Motorista */}
@@ -186,7 +245,7 @@ export default function MotoristaPage() {
           <div>
             <h4 className="text-sm font-bold text-white">Enviar Revisão</h4>
             <p className="text-[11px] text-zinc-400 mt-0.5">
-              Anexar foto da nota fiscal e odômetro
+              Anexar nota fiscal de peças e odômetro
             </p>
           </div>
         </Link>

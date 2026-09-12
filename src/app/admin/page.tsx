@@ -29,21 +29,36 @@ export default function AdminDashboardPage() {
     activeAlerts,
   } = useSevenDrive();
 
-  // Cálculos Consolidados de Toda a Frota
+  const { clearOrphanMockData } = useSevenDrive();
+
+  // Executa limpeza automática de resquícios de veículos excluídos
+  React.useEffect(() => {
+    clearOrphanMockData();
+  }, [vehicles.length]);
+
+  const existingVehicleIds = new Set(vehicles.map((v) => v.id));
+
+  // Cálculos Consolidados de Toda a Frota (Apenas veículos reais cadastrados!)
   const totalReceitas = payments
-    .filter((p) => p.status === "confirmado")
+    .filter((p) => p.status === "confirmado" && existingVehicleIds.has(p.vehicle_id))
     .reduce((acc, curr) => acc + Number(curr.valor), 0);
 
-  const totalManutencoes = maintenances.reduce((acc, curr) => acc + Number(curr.valor_custo || 0), 0);
+  const totalManutencoes = maintenances
+    .filter((m) => existingVehicleIds.has(m.vehicle_id))
+    .reduce((acc, curr) => acc + Number(curr.valor_custo || 0), 0);
+
   const totalMultas = fines
-    .filter((f) => f.status_pagamento === "pago_locador")
+    .filter((f) => f.status_pagamento === "pago_locador" && existingVehicleIds.has(f.vehicle_id))
     .reduce((acc, curr) => acc + Number(curr.valor), 0);
-  const totalDespesas = expenses.reduce((acc, curr) => acc + Number(curr.valor), 0);
+
+  const totalDespesas = expenses
+    .filter((e) => existingVehicleIds.has(e.vehicle_id))
+    .reduce((acc, curr) => acc + Number(curr.valor), 0);
 
   const totalCustos = totalManutencoes + totalMultas + totalDespesas;
   const saldoLiquidoGeral = totalReceitas - totalCustos;
 
-  const pendingPayments = payments.filter((p) => p.status === "pendente_conferencia");
+  const pendingPayments = payments.filter((p) => p.status === "pendente_conferencia" && existingVehicleIds.has(p.vehicle_id));
 
   return (
     <div className="space-y-8">

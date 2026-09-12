@@ -2,11 +2,10 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useSevenDrive } from "@/lib/store";
 import {
   Car,
-  ShieldCheck,
   UserCheck,
   Bell,
   Wrench,
@@ -15,34 +14,38 @@ import {
   AlertTriangle,
   FileText,
   Sliders,
-  ChevronDown,
   Menu,
   X,
   CreditCard,
   History,
+  Lock,
+  Share2,
+  Check,
+  LogOut,
+  ExternalLink,
 } from "lucide-react";
 
 export function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const {
     currentUser,
-    setCurrentUser,
-    profiles,
     payments,
     activeAlerts,
-    triggerBrowserNotification,
+    logoutAdmin,
+    isAdminAuthenticated,
   } = useSevenDrive();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [alertDropdownOpen, setAlertDropdownOpen] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
-  // Pagamentos que requerem conferência pelo Locador
+  // Verifica se está na área do motorista ou do administrador
+  const isMotoristaRoute = pathname.startsWith("/motorista");
+
   const pendingConferenceCount = payments.filter(
     (p) => p.status === "pendente_conferencia"
   ).length;
-
-  const isAdmin = currentUser.role === "admin";
 
   interface NavLink {
     href: string;
@@ -81,15 +84,33 @@ export function Navbar() {
     { href: "/motorista/historico", label: "Histórico", icon: History },
   ];
 
-  const currentLinks: NavLink[] = isAdmin ? adminLinks : driverLinks;
+  const currentLinks = isMotoristaRoute ? driverLinks : adminLinks;
+
+  const handleCopyDriverLink = () => {
+    if (typeof window !== "undefined" && navigator.clipboard) {
+      const origin = window.location.origin;
+      const driverUrl = `${origin}/motorista`;
+      navigator.clipboard.writeText(driverUrl);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 3000);
+    }
+  };
+
+  const handleAdminLock = () => {
+    logoutAdmin();
+    router.push("/admin");
+  };
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-zinc-800 bg-zinc-950/95 backdrop-blur-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo e Status Free */}
+          {/* Logo e Identificação de Portal */}
           <div className="flex items-center gap-6">
-            <Link href={isAdmin ? "/admin" : "/motorista"} className="flex items-center gap-2.5 group">
+            <Link
+              href={isMotoristaRoute ? "/motorista" : "/admin"}
+              className="flex items-center gap-2.5 group"
+            >
               <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-blue-600/30 group-hover:scale-105 transition">
                 <Car className="w-5 h-5" />
               </div>
@@ -98,8 +119,14 @@ export function Navbar() {
                   <span className="text-lg font-black tracking-tight text-white">
                     SEVEN <span className="text-blue-500">DRIVE</span>
                   </span>
-                  <span className="hidden sm:inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    $0/Mês Free
+                  <span
+                    className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                      isMotoristaRoute
+                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                        : "bg-purple-500/10 text-purple-400 border-purple-500/20"
+                    }`}
+                  >
+                    {isMotoristaRoute ? "Portal do Motorista" : "Área do Locador"}
                   </span>
                 </div>
                 <span className="text-[10px] font-semibold text-zinc-400 block -mt-1">
@@ -140,8 +167,34 @@ export function Navbar() {
             </nav>
           </div>
 
-          {/* Área Direita: Notificações & Alternador de Perfil */}
-          <div className="flex items-center gap-3">
+          {/* Área Direita */}
+          <div className="flex items-center gap-2.5">
+            {/* Apenas na Área do Administrador: Botão Copiar Link do Motorista */}
+            {!isMotoristaRoute && (
+              <button
+                type="button"
+                onClick={handleCopyDriverLink}
+                className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
+                  copiedLink
+                    ? "bg-emerald-600 text-white border-emerald-500"
+                    : "bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border-zinc-700"
+                }`}
+                title="Copiar link exclusivo do portal do motorista"
+              >
+                {copiedLink ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-white" />
+                    <span>Link Copiado!</span>
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Link do Motorista</span>
+                  </>
+                )}
+              </button>
+            )}
+
             {/* Sino de Notificações */}
             <div className="relative">
               <button
@@ -158,12 +211,11 @@ export function Navbar() {
                 )}
               </button>
 
-              {/* Dropdown de Notificações */}
               {alertDropdownOpen && (
                 <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-4 z-50">
                   <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
                     <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                      Central de Notificações
+                      Notificações do Sistema
                     </h4>
                     <span className="text-[10px] text-zinc-400">
                       {activeAlerts.length + pendingConferenceCount} pendências
@@ -171,7 +223,7 @@ export function Navbar() {
                   </div>
 
                   <div className="space-y-2 mt-3 max-h-72 overflow-y-auto">
-                    {pendingConferenceCount > 0 && isAdmin && (
+                    {pendingConferenceCount > 0 && !isMotoristaRoute && (
                       <Link
                         href="/admin/conferencia"
                         onClick={() => setAlertDropdownOpen(false)}
@@ -179,10 +231,10 @@ export function Navbar() {
                       >
                         <div className="flex items-center gap-2 text-xs font-bold text-blue-300">
                           <FileCheck className="w-4 h-4 text-blue-400" />
-                          <span>Fila de Conferência Ativa</span>
+                          <span>Fila de Conferência</span>
                         </div>
                         <p className="text-[11px] text-zinc-300 mt-1">
-                          {pendingConferenceCount} pagamento(s) com fotos de vistoria aguardando sua conferência.
+                          {pendingConferenceCount} pagamento(s) com fotos de vistoria aguardando conferência.
                         </p>
                       </Link>
                     )}
@@ -214,73 +266,18 @@ export function Navbar() {
               )}
             </div>
 
-            {/* Alternador Rápido de Perfil (Locador vs Locatário) */}
-            <div className="relative">
+            {/* Apenas na Área do Administrador: Botão de Bloquear / Sair */}
+            {!isMotoristaRoute && (
               <button
-                onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition"
+                type="button"
+                onClick={handleAdminLock}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 text-xs font-bold transition"
+                title="Bloquear Painel do Administrador"
               >
-                <div
-                  className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${
-                    isAdmin
-                      ? "bg-purple-600 text-white"
-                      : "bg-emerald-600 text-white"
-                  }`}
-                >
-                  {isAdmin ? "A" : "M"}
-                </div>
-                <div className="text-left hidden sm:block">
-                  <div className="text-xs font-bold text-white leading-none">
-                    {currentUser.full_name.split(" ")[0]}
-                  </div>
-                  <div className="text-[10px] text-zinc-400 leading-tight">
-                    {isAdmin ? "Locador (Admin)" : "Motorista"}
-                  </div>
-                </div>
-                <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+                <Lock className="w-3.5 h-3.5 text-zinc-400" />
+                <span className="hidden sm:inline">Bloquear</span>
               </button>
-
-              {profileDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-64 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-2 z-50">
-                  <div className="px-3 py-2 border-b border-zinc-800 mb-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                      Alternar Visualização (Demonstração)
-                    </span>
-                  </div>
-
-                  {profiles.map((profile) => (
-                    <button
-                      key={profile.id}
-                      onClick={() => {
-                        setCurrentUser(profile);
-                        setProfileDropdownOpen(false);
-                      }}
-                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs transition ${
-                        currentUser.id === profile.id
-                          ? "bg-blue-600 text-white font-bold"
-                          : "text-zinc-300 hover:bg-zinc-800"
-                      }`}
-                    >
-                      <div
-                        className={`w-6 h-6 rounded-md flex items-center justify-center font-bold text-[10px] ${
-                          profile.role === "admin"
-                            ? "bg-purple-700 text-white"
-                            : "bg-emerald-700 text-white"
-                        }`}
-                      >
-                        {profile.role === "admin" ? "A" : "M"}
-                      </div>
-                      <div>
-                        <div className="font-semibold">{profile.full_name}</div>
-                        <div className="text-[10px] opacity-75">
-                          {profile.role === "admin" ? "Portal do Locador" : "Portal do Locatário"}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            )}
 
             {/* Mobile Menu Button */}
             <button
@@ -321,6 +318,27 @@ export function Navbar() {
                 </Link>
               );
             })}
+
+            {!isMotoristaRoute && (
+              <div className="pt-2 border-t border-zinc-800 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyDriverLink}
+                  className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 text-xs font-bold text-zinc-200 border border-zinc-700"
+                >
+                  <Share2 className="w-4 h-4 text-emerald-400" />
+                  <span>{copiedLink ? "Link Copiado!" : "Copiar Link do Motorista"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAdminLock}
+                  className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-950/40 text-xs font-bold text-red-300 border border-red-800"
+                >
+                  <Lock className="w-4 h-4" />
+                  <span>Bloquear Área de Administrador</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
