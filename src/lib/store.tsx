@@ -249,6 +249,17 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     setExpenses((prev) => prev.filter((e) => existingVehIds.has(e.vehicle_id)));
   };
 
+  // Garante automaticamente que contratos ativos sempre tenham as próximas semanas geradas sem intervenção manual
+  useEffect(() => {
+    if (contracts.length > 0) {
+      contracts.forEach((c) => {
+        if (c.status === "ativo") {
+          ensureFuturePaymentsForContract(c.id, 6);
+        }
+      });
+    }
+  }, [contracts.length]);
+
   // Cálculo Dinâmico de Alertas Duplos de Manutenção por KM (Apenas veículos existentes!)
   useEffect(() => {
     const alerts: AlertItem[] = [];
@@ -392,38 +403,50 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     setContracts((prev) => prev.filter((c) => c.id !== id));
   };
 
-  // Gerador Automático de Parcelas Semanais pelo Dia Fixo da Semana
-  const generateWeeklyPaymentsForContract = (contractId: string, numberOfWeeks: number = 4) => {
+  // Garante que existam parcelas geradas continuamente para as próximas semanas
+  const ensureFuturePaymentsForContract = (contractId: string, minWeeksAhead: number = 6) => {
     const contract = contracts.find((c) => c.id === contractId);
-    if (!contract) return;
+    if (!contract || contract.status !== "ativo") return;
 
     // Mapeamento: 1=Segunda, 2=Terça, 3=Quarta, 4=Quinta, 5=Sexta, 6=Sábado, 7=Domingo
     const targetDayOfWeek = contract.dia_vencimento === 7 ? 0 : contract.dia_vencimento;
-    
-    // Início da busca a partir da data de início
-    const baseDate = new Date(contract.data_inicio + "T12:00:00");
-    const firstDueDate = new Date(baseDate);
 
-    // Ajusta para o próximo dia da semana correspondente
-    while (firstDueDate.getDay() !== targetDayOfWeek) {
-      firstDueDate.setDate(firstDueDate.getDate() + 1);
+    // Encontra o último pagamento existente deste contrato ou a data de início
+    const contractPayments = payments
+      .filter((p) => p.contract_id === contract.id)
+      .sort((a, b) => new Date(a.data_vencimento).getTime() - new Date(b.data_vencimento).getTime());
+
+    let lastDueDate: Date;
+    if (contractPayments.length > 0) {
+      lastDueDate = new Date(contractPayments[contractPayments.length - 1].data_vencimento + "T12:00:00");
+    } else {
+      const baseDate = new Date(contract.data_inicio + "T12:00:00");
+      lastDueDate = new Date(baseDate);
+      while (lastDueDate.getDay() !== targetDayOfWeek) {
+        lastDueDate.setDate(lastDueDate.getDate() + 1);
+      }
+      // Retrocede 7 dias para que o loop comece nele
+      lastDueDate.setDate(lastDueDate.getDate() - 7);
     }
 
+    const today = new Date();
+    const limitFutureDate = new Date(today);
+    limitFutureDate.setDate(limitFutureDate.getDate() + (minWeeksAhead * 7));
+
     const newPayments: Payment[] = [];
+    let curDate = new Date(lastDueDate);
 
-    for (let i = 0; i < numberOfWeeks; i++) {
-      const dueDate = new Date(firstDueDate);
-      dueDate.setDate(dueDate.getDate() + (i * 7));
-      const dueDateStr = dueDate.toISOString().split("T")[0];
+    // Itera adicionando semanas enquanto a última data for menor que o limite futuro
+    while (curDate < limitFutureDate) {
+      curDate.setDate(curDate.getDate() + 7);
+      const dueDateStr = curDate.toISOString().split("T")[0];
 
-      // Evita duplicidades
       const alreadyExists = payments.some(
         (p) => p.contract_id === contract.id && p.data_vencimento === dueDateStr
       );
 
       if (!alreadyExists) {
-        // Cálculo do número da semana no ano
-        const d = new Date(Date.UTC(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate()));
+        const d = new Date(Date.UTC(curDate.getFullYear(), curDate.getMonth(), curDate.getDate()));
         const dayNum = d.getUTCDay() || 7;
         d.setUTCDate(d.getUTCDate() + 4 - dayNum);
         const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
@@ -437,7 +460,7 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
           valor: contract.valor_aluguel,
           data_vencimento: dueDateStr,
           status: "pendente_envio",
-          semana_ano: `${dueDate.getFullYear()}-${weekNo}`,
+          semana_ano: `${curDate.getFullYear()}-${weekNo}`,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
@@ -445,8 +468,13 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     }
 
     if (newPayments.length > 0) {
-      setPayments((prev) => [...newPayments, ...prev]);
+      setPayments((prev) => [...prev, ...newPayments]);
     }
+  };
+
+  // Gerador de Parcelas Semanais pelo Dia Fixo da Semana
+  const generateWeeklyPaymentsForContract = (contractId: string, numberOfWeeks: number = 4) => {
+    ensureFuturePaymentsForContract(contractId, numberOfWeeks);
   };
 
   // Pagamentos

@@ -16,41 +16,49 @@ export function WeeklyTimeline() {
     .filter((p) => existingVehicleIds.has(p.vehicle_id))
     .filter((p) => selectedVehicle === "all" || p.vehicle_id === selectedVehicle);
 
-  // Semanas dinâmicas de Setembro e Outubro
-  const weeks = [
-    {
-      id: "2026-37",
-      label: "Semana 37 (07/09 a 13/09)",
-      range: "07/09 - 13/09",
-      startDate: "2026-09-07",
-      endDate: "2026-09-13",
-      isCurrent: true,
-    },
-    {
-      id: "2026-38",
-      label: "Semana 38 (14/09 a 20/09)",
-      range: "14/09 - 20/09",
-      startDate: "2026-09-14",
-      endDate: "2026-09-20",
-      isCurrent: false,
-    },
-    {
-      id: "2026-39",
-      label: "Semana 39 (21/09 a 27/09)",
-      range: "21/09 - 27/09",
-      startDate: "2026-09-21",
-      endDate: "2026-09-27",
-      isCurrent: false,
-    },
-    {
-      id: "2026-40",
-      label: "Semana 40 (28/09 a 04/10)",
-      range: "28/09 - 04/10",
-      startDate: "2026-09-28",
-      endDate: "2026-10-04",
-      isCurrent: false,
-    },
-  ];
+  // Cálculo das 4 semanas dinâmicas em torno da semana atual (a partir da data de hoje)
+  const getDynamicWeeks = () => {
+    const today = new Date();
+    // Encontra a segunda-feira da semana atual
+    const day = today.getDay();
+    const diffToMonday = today.getDate() - day + (day === 0 ? -6 : 1);
+    const currentMonday = new Date(today.setDate(diffToMonday));
+
+    const result = [];
+    for (let i = 0; i < 4; i++) {
+      const start = new Date(currentMonday);
+      start.setDate(start.getDate() + (i * 7));
+
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
+
+      const d = new Date(Date.UTC(start.getFullYear(), start.getMonth(), start.getDate()));
+      const dayNum = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+      const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+
+      const formatShort = (date: Date) => {
+        const dd = String(date.getDate()).padStart(2, "0");
+        const mm = String(date.getMonth() + 1).padStart(2, "0");
+        return `${dd}/${mm}`;
+      };
+
+      const toISO = (date: Date) => date.toISOString().split("T")[0];
+
+      result.push({
+        id: `${start.getFullYear()}-${weekNo}`,
+        label: `Semana ${weekNo} (${formatShort(start)} a ${formatShort(end)})`,
+        range: `${formatShort(start)} - ${formatShort(end)}`,
+        startDate: toISO(start),
+        endDate: toISO(end),
+        isCurrent: i === 0,
+      });
+    }
+    return result;
+  };
+
+  const weeks = getDynamicWeeks();
 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-sm">
