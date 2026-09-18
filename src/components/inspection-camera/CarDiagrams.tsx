@@ -1,7 +1,16 @@
 import React from "react";
 
 interface CarDiagramProps {
-  angle: "frente" | "traseira" | "lateral_esquerda" | "lateral_direita" | "interior" | "odometro";
+  angle:
+    | "frente"
+    | "traseira"
+    | "lateral_esquerda"
+    | "lateral_direita"
+    | "lateralEsq"
+    | "lateralDir"
+    | "interior"
+    | "odometro"
+    | string;
   className?: string;
 }
 
@@ -44,6 +53,7 @@ export function CarDiagramIllustration({ angle, className = "w-full h-auto" }: C
         </svg>
       );
     case "lateral_esquerda":
+    case "lateralEsq":
       return (
         <svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
           <rect width="200" height="120" rx="12" fill="#18181b" />
@@ -60,6 +70,7 @@ export function CarDiagramIllustration({ angle, className = "w-full h-auto" }: C
         </svg>
       );
     case "lateral_direita":
+    case "lateralDir":
       return (
         <svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} style={{ transform: "scaleX(-1)" }}>
           <rect width="200" height="120" rx="12" fill="#18181b" />

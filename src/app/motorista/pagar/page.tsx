@@ -16,7 +16,9 @@ import {
   FileCheck,
   AlertCircle,
   FileText,
+  Loader2,
 } from "lucide-react";
+import { compressImage } from "@/lib/image-compressor";
 
 export default function PagarWizardPage() {
   const router = useRouter();
@@ -52,6 +54,8 @@ export default function PagarWizardPage() {
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
   const [receiptUrl, setReceiptUrl] = useState<string>("");
   const [receiptFileName, setReceiptFileName] = useState<string>("");
+  const [compressingReceipt, setCompressingReceipt] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Vistoria
   const [currentKM, setCurrentKM] = useState<number>(vehicle ? vehicle.km_atual : 0);
@@ -85,32 +89,42 @@ export default function PagarWizardPage() {
   const filledPhotosCount = Object.values(photos).filter(Boolean).length;
   const isInspectionValid = filledPhotosCount === 6 && currentKM > 0;
 
-  const handleReceiptFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleReceiptFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setReceiptFileName(file.name);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setReceiptUrl(event.target.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
+      try {
+        setCompressingReceipt(true);
+        const compressed = await compressImage(file, 1400, 1400, 0.75);
+        setReceiptUrl(compressed);
+      } catch (err) {
+        console.error("Erro ao processar comprovante:", err);
+      } finally {
+        setCompressingReceipt(false);
+      }
     }
   };
 
-  const handleFinalSubmit = () => {
-    if (!isReceiptValid || !isInspectionValid) return;
+  const handleFinalSubmit = async () => {
+    if (!isReceiptValid || !isInspectionValid || isSubmitting) return;
 
-    submitPaymentAndInspection({
-      paymentId: currentPayment.id,
-      receiptUrl,
-      kmRegistrado: currentKM,
-      photos,
-      observacoes,
-    });
+    try {
+      setIsSubmitting(true);
+      await submitPaymentAndInspection({
+        paymentId: currentPayment.id,
+        receiptUrl,
+        kmRegistrado: currentKM,
+        photos,
+        observacoes,
+      });
 
-    setSubmitted(true);
+      setSubmitted(true);
+    } catch (err) {
+      console.error("Erro ao enviar pagamento e vistoria:", err);
+      alert("Houve um erro no processamento do envio. Por favor tente novamente.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (submitted) {
@@ -259,11 +273,21 @@ export default function PagarWizardPage() {
               </div>
 
               <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs cursor-pointer shadow-md transition">
-                <Upload className="w-4 h-4" />
-                <span>Escolher Arquivo do Comprovante</span>
+                {compressingReceipt ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Processando Comprovante...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" />
+                    <span>Escolher Arquivo do Comprovante</span>
+                  </>
+                )}
                 <input
                   type="file"
                   accept="image/*,.pdf"
+                  disabled={compressingReceipt}
                   onChange={handleReceiptFile}
                   className="hidden"
                 />
@@ -365,16 +389,25 @@ export default function PagarWizardPage() {
 
               <button
                 type="button"
-                disabled={!isInspectionValid || !isReceiptValid}
+                disabled={!isInspectionValid || !isReceiptValid || isSubmitting}
                 onClick={handleFinalSubmit}
                 className={`flex items-center gap-2 px-8 py-3.5 rounded-xl font-black text-sm shadow-xl transition-all ${
-                  isInspectionValid && isReceiptValid
+                  isInspectionValid && isReceiptValid && !isSubmitting
                     ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30 scale-[1.02]"
                     : "bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700"
                 }`}
               >
-                <CheckCircle2 className="w-5 h-5" />
-                <span>Concluir e Enviar para Conferência</span>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Enviando Comprovante e Vistoria...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-5 h-5" />
+                    <span>Concluir e Enviar para Conferência</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

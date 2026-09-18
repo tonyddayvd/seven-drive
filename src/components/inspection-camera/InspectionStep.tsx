@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { Camera, Check, Upload, AlertCircle, Info, Image as ImageIcon, Sparkles } from "lucide-react";
+import { Camera, Check, Upload, AlertCircle, Info, Image as ImageIcon, Sparkles, Loader2 } from "lucide-react";
 import { CarDiagramIllustration } from "./CarDiagrams";
+import { compressImage } from "@/lib/image-compressor";
 
 export interface InspectionPhotos {
   frente: string;
@@ -30,6 +31,8 @@ export function InspectionStep({
   onObservacoesChange,
   allowGallery = false,
 }: InspectionStepProps) {
+  const [compressingSlot, setCompressingSlot] = useState<string | null>(null);
+
   const photoSlots = [
     { key: "frente", label: "Frente do Veículo", desc: "Foto frontal completa pegando a placa" },
     { key: "lateralEsq", label: "Lateral Esquerda", desc: "Foto completa da lateral do motorista" },
@@ -42,19 +45,23 @@ export function InspectionStep({
   const filledCount = Object.values(photos).filter(Boolean).length;
   const isComplete = filledCount === 6 && currentKM > 0;
 
-  const handleFileUpload = (key: keyof InspectionPhotos, e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (key: keyof InspectionPhotos, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          onPhotosChange({
-            ...photos,
-            [key]: event.target.result as string,
-          });
-        }
-      };
-      reader.readAsDataURL(file);
+      try {
+        setCompressingSlot(key);
+        // Comprime automaticamente fotos de celulares (10MB -> ~100KB)
+        const compressedBase64 = await compressImage(file, 1280, 1280, 0.72);
+        onPhotosChange({
+          ...photos,
+          [key]: compressedBase64,
+        });
+      } catch (err) {
+        console.error("Erro processando foto:", err);
+      } finally {
+        setCompressingSlot(null);
+        e.target.value = "";
+      }
     }
   };
 
@@ -177,7 +184,14 @@ export function InspectionStep({
 
                     {/* Botão de Captura: Câmera para Motorista / Galeria para Admin */}
                     <label className="border-2 border-dashed border-blue-500/50 hover:border-blue-400 bg-blue-950/20 hover:bg-blue-950/40 rounded-xl p-3 flex items-center justify-center gap-2 cursor-pointer transition">
-                      {allowGallery ? (
+                      {compressingSlot === slot.key ? (
+                        <>
+                          <Loader2 className="w-4 h-4 text-amber-400 animate-spin shrink-0" />
+                          <span className="text-xs font-bold text-amber-300">
+                            Otimizando Foto...
+                          </span>
+                        </>
+                      ) : allowGallery ? (
                         <>
                           <ImageIcon className="w-4 h-4 text-purple-400 shrink-0" />
                           <span className="text-xs font-bold text-purple-300">
@@ -195,6 +209,7 @@ export function InspectionStep({
                       <input
                         type="file"
                         accept="image/*"
+                        disabled={Boolean(compressingSlot)}
                         {...(!allowGallery ? { capture: "environment" } : {})}
                         onChange={(e) => handleFileUpload(slot.key as keyof InspectionPhotos, e)}
                         className="hidden"

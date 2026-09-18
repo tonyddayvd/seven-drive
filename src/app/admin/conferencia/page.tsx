@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useSevenDrive } from "@/lib/store";
 import { formatCurrency, formatDate, formatDateTime, formatKM, formatPlate } from "@/lib/utils";
 import {
@@ -14,6 +14,9 @@ import {
   ZoomIn,
   Check,
   ArrowRight,
+  RefreshCw,
+  Maximize2,
+  X,
 } from "lucide-react";
 
 export default function ConferenciaPage() {
@@ -24,6 +27,7 @@ export default function ConferenciaPage() {
     profiles,
     confirmPaymentAndInspection,
     rejectPaymentAndInspection,
+    refreshDataFromCloud,
   } = useSevenDrive();
 
   // Pagamentos que estão na fila de conferência
@@ -35,20 +39,55 @@ export default function ConferenciaPage() {
   const [adminObservation, setAdminObservation] = useState("");
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Modal de Recusa
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
 
+  // Modal de Zoom de Imagem em Alta Resolução
+  const [zoomImage, setZoomImage] = useState<{ url: string; title: string } | null>(null);
+
+  // Polling automático da nuvem a cada 12 segundos para manter a fila sempre atualizada
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refreshDataFromCloud().catch(() => {});
+    }, 12000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Garante que haja um item selecionado caso a fila mude
+  useEffect(() => {
+    if (!selectedPaymentId && pendingPayments.length > 0) {
+      setSelectedPaymentId(pendingPayments[0].id);
+    }
+  }, [pendingPayments, selectedPaymentId]);
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshDataFromCloud();
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 500);
+    }
+  };
+
   const currentPayment = payments.find((p) => p.id === selectedPaymentId);
-  const currentInspection = inspections.find((i) => i.payment_id === selectedPaymentId);
+
+  // Busca a vistoria vinculada ao pagamento, com fallback para a mais recente do mesmo veículo
+  const currentInspection =
+    inspections.find((i) => i.payment_id === selectedPaymentId) ||
+    inspections
+      .filter((i) => i.vehicle_id === currentPayment?.vehicle_id)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+
   const currentVehicle = vehicles.find((v) => v.id === currentPayment?.vehicle_id);
   const currentDriver = profiles.find((p) => p.id === currentPayment?.driver_id);
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!selectedPaymentId) return;
 
-    confirmPaymentAndInspection(
+    await confirmPaymentAndInspection(
       selectedPaymentId,
       adminObservation || "Conferência aprovada com sucesso pelo Locador."
     );
@@ -68,11 +107,11 @@ export default function ConferenciaPage() {
     }, 6000);
   };
 
-  const handleRejectSubmit = (e: React.FormEvent) => {
+  const handleRejectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPaymentId || !rejectReason.trim()) return;
 
-    rejectPaymentAndInspection(selectedPaymentId, rejectReason.trim());
+    await rejectPaymentAndInspection(selectedPaymentId, rejectReason.trim());
 
     setErrorMessage(
       `Intenção de pagamento de ${formatCurrency(currentPayment?.valor)} foi RECUSADA. O motorista foi notificado do motivo: "${rejectReason.trim()}".`
@@ -91,7 +130,7 @@ export default function ConferenciaPage() {
 
   return (
     <div className="space-y-6">
-      {/* Cabeçalho */}
+      {/* Cabeçalho com Botão de Atualização */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -106,6 +145,16 @@ export default function ConferenciaPage() {
             Compare o comprovante bancário com as fotos da vistoria e do odômetro antes de confirmar e dar baixa.
           </p>
         </div>
+
+        <button
+          type="button"
+          onClick={handleManualRefresh}
+          disabled={isRefreshing}
+          className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-200 border border-zinc-700 transition shadow-sm"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-blue-400" : "text-zinc-400"}`} />
+          <span>{isRefreshing ? "Sincronizando..." : "Atualizar Fila"}</span>
+        </button>
       </div>
 
       {/* Alerta de Sucesso */}
@@ -161,12 +210,13 @@ export default function ConferenciaPage() {
                     }`}
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="font-bold text-white text-xs">{driv?.full_name}</span>
-                      <span className="font-bold text-emerald-400 text-xs">
+                      <span className="text-xs font-bold text-white">
+                        {driv?.full_name || "Motorista"}
+                      </span>
+                      <span className="text-xs font-black text-emerald-400">
                         {formatCurrency(p.valor)}
                       </span>
                     </div>
-
                     <div className="flex items-center justify-between text-[11px] text-zinc-400">
                       <span className="flex items-center gap-1 font-mono">
                         <Car className="w-3 h-3 text-zinc-500" />
@@ -217,16 +267,34 @@ export default function ConferenciaPage() {
                         <FileCheck className="w-4 h-4 text-blue-400" />
                         1. Comprovante de Pagamento
                       </h4>
-                      <span className="text-[10px] text-zinc-500">PIX / Transferência</span>
+                      <span className="text-[10px] text-zinc-500">Clique para ampliar</span>
                     </div>
 
-                    <div className="rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950 aspect-[3/4] flex items-center justify-center relative group">
+                    <div
+                      onClick={() => {
+                        if (currentPayment.comprovante_url) {
+                          setZoomImage({
+                            url: currentPayment.comprovante_url,
+                            title: `Comprovante - ${currentDriver?.full_name} (${formatCurrency(currentPayment.valor)})`,
+                          });
+                        }
+                      }}
+                      className="rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950 aspect-[3/4] flex items-center justify-center relative group cursor-pointer"
+                    >
                       {currentPayment.comprovante_url ? (
-                        <img
-                          src={currentPayment.comprovante_url}
-                          alt="Comprovante de Pagamento"
-                          className="w-full h-full object-contain"
-                        />
+                        <>
+                          <img
+                            src={currentPayment.comprovante_url}
+                            alt="Comprovante de Pagamento"
+                            className="w-full h-full object-contain group-hover:scale-105 transition"
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                            <span className="bg-zinc-900/90 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 border border-zinc-700 shadow-lg">
+                              <Maximize2 className="w-3.5 h-3.5 text-blue-400" />
+                              Ampliar Comprovante
+                            </span>
+                          </div>
+                        </>
                       ) : (
                         <div className="text-center p-4 text-zinc-500 text-xs">
                           Nenhum comprovante anexado
@@ -248,13 +316,31 @@ export default function ConferenciaPage() {
                     </div>
 
                     {/* Foto Principal do Odômetro */}
-                    <div className="rounded-xl overflow-hidden border-2 border-amber-500/60 bg-zinc-950 aspect-video relative">
+                    <div
+                      onClick={() => {
+                        if (currentInspection?.foto_odometro_url) {
+                          setZoomImage({
+                            url: currentInspection.foto_odometro_url,
+                            title: `Foto do Odômetro (${formatKM(currentInspection.km_registrado)}) - Placa ${currentVehicle?.placa}`,
+                          });
+                        }
+                      }}
+                      className="rounded-xl overflow-hidden border-2 border-amber-500/60 bg-zinc-950 aspect-video relative group cursor-pointer"
+                    >
                       {currentInspection?.foto_odometro_url ? (
-                        <img
-                          src={currentInspection.foto_odometro_url}
-                          alt="Foto do Odômetro"
-                          className="w-full h-full object-cover"
-                        />
+                        <>
+                          <img
+                            src={currentInspection.foto_odometro_url}
+                            alt="Foto do Odômetro"
+                            className="w-full h-full object-cover group-hover:scale-105 transition"
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                            <span className="bg-zinc-900/90 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 border border-zinc-700 shadow-lg">
+                              <Maximize2 className="w-3.5 h-3.5 text-amber-400" />
+                              Ampliar Odômetro
+                            </span>
+                          </div>
+                        </>
                       ) : (
                         <div className="text-center p-4 text-zinc-500 text-xs flex items-center justify-center h-full">
                           Sem foto do odômetro
@@ -276,14 +362,29 @@ export default function ConferenciaPage() {
                       ].map((photo, idx) => (
                         <div
                           key={idx}
-                          className="aspect-square rounded-lg overflow-hidden border border-zinc-800 bg-zinc-950 relative group"
+                          onClick={() => {
+                            if (photo.url) {
+                              setZoomImage({
+                                url: photo.url,
+                                title: `Vistoria: ${photo.label} - Placa ${currentVehicle?.placa}`,
+                              });
+                            }
+                          }}
+                          className={`aspect-square rounded-lg overflow-hidden border border-zinc-800 bg-zinc-950 relative group ${
+                            photo.url ? "cursor-pointer" : ""
+                          }`}
                         >
                           {photo.url ? (
-                            <img
-                              src={photo.url}
-                              alt={photo.label}
-                              className="w-full h-full object-cover group-hover:scale-110 transition"
-                            />
+                            <>
+                              <img
+                                src={photo.url}
+                                alt={photo.label}
+                                className="w-full h-full object-cover group-hover:scale-115 transition"
+                              />
+                              <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                                <ZoomIn className="w-3.5 h-3.5 text-white" />
+                              </div>
+                            </>
                           ) : (
                             <div className="w-full h-full bg-zinc-800 flex items-center justify-center text-[9px] text-zinc-500">
                               -
@@ -329,20 +430,17 @@ export default function ConferenciaPage() {
                     type="text"
                     value={adminObservation}
                     onChange={(e) => setAdminObservation(e.target.value)}
-                    placeholder="Ex: Pagamento conciliado via extrato Itaú. Vistoria sem avarias detectadas."
+                    placeholder="Ex: Pagamento compensado via PIX, veículo higienizado e odômetro conferido com sucesso."
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
-                {/* BOTÕES DE CONFIRMAR E RECUSAR */}
-                <div className="pt-2 border-t border-zinc-800 flex flex-col sm:flex-row items-center justify-end gap-3">
+                {/* AÇÕES: RECUSAR OU CONFIRMAR */}
+                <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-4 border-t border-zinc-800">
                   <button
                     type="button"
-                    onClick={() => {
-                      setRejectReason("");
-                      setIsRejectModalOpen(true);
-                    }}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800 text-xs font-bold transition"
+                    onClick={() => setIsRejectModalOpen(true)}
+                    className="w-full sm:w-auto px-5 py-3 rounded-xl bg-red-950/40 hover:bg-red-950/80 text-red-400 border border-red-800/80 font-bold text-xs flex items-center justify-center gap-2 transition"
                   >
                     <XCircle className="w-4 h-4" />
                     <span>Recusar Intenção de Pagamento</span>
@@ -351,10 +449,10 @@ export default function ConferenciaPage() {
                   <button
                     type="button"
                     onClick={handleConfirm}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/30 transition"
+                    className="w-full sm:w-auto px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 transition"
                   >
-                    <Check className="w-5 h-5" />
-                    <span>Confirmar e Dar Baixa (Atualizar Saldo e KM)</span>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Confirmar e Dar Baixa (Quitar Aluguel)</span>
                   </button>
                 </div>
               </div>
@@ -363,20 +461,51 @@ export default function ConferenciaPage() {
         </div>
       )}
 
-      {/* MODAL DE RECUSA COM MOTIVO OBRIGATÓRIO */}
+      {/* MODAL DE ZOOM DE IMAGEM */}
+      {zoomImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
+          onClick={() => setZoomImage(null)}
+        >
+          <div
+            className="relative max-w-4xl w-full max-h-[90vh] flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950">
+              <span className="text-xs font-bold text-white">{zoomImage.title}</span>
+              <button
+                type="button"
+                onClick={() => setZoomImage(null)}
+                className="p-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-black/60">
+              <img
+                src={zoomImage.url}
+                alt={zoomImage.title}
+                className="max-h-[75vh] w-auto object-contain rounded-lg shadow-2xl"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE RECUSA */}
       {isRejectModalOpen && currentPayment && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-zinc-900 border border-red-500/50 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-red-500/50 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-scale-up">
             <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-red-500/10 text-red-400 flex items-center justify-center shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-red-500/10 text-red-400 flex items-center justify-center shrink-0">
                   <XCircle className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">
+                  <h3 className="text-sm font-bold text-white">
                     Recusar Intenção de Pagamento
                   </h3>
-                  <p className="text-xs text-zinc-400">
+                  <p className="text-[11px] text-zinc-400">
                     {currentDriver?.full_name} • {formatCurrency(currentPayment.valor)}
                   </p>
                 </div>

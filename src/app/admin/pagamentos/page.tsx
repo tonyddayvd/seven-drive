@@ -22,6 +22,7 @@ import {
   Image as ImageIcon,
   Sparkles,
 } from "lucide-react";
+import { compressImage } from "@/lib/image-compressor";
 
 export default function PagamentosPage() {
   const {
@@ -74,25 +75,24 @@ export default function PagamentosPage() {
     setIsInspectionModalOpen(true);
   };
 
-  const handleAdminReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAdminReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setAdminReceiptFileName(file.name);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setAdminReceiptUrl(event.target.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImage(file, 1400, 1400, 0.75);
+        setAdminReceiptUrl(compressed);
+      } catch (err) {
+        console.error("Erro ao processar comprovante no admin:", err);
+      }
     }
   };
 
-  const handleSaveAdminInspectionAndConfirm = () => {
+  const handleSaveAdminInspectionAndConfirm = async () => {
     if (!selectedPaymentForInspection) return;
 
     // Submete a vistoria e comprovante
-    submitPaymentAndInspection({
+    await submitPaymentAndInspection({
       paymentId: selectedPaymentForInspection.id,
       receiptUrl: adminReceiptUrl || "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=400&q=80",
       kmRegistrado: adminInspectionKM,
@@ -101,12 +101,10 @@ export default function PagamentosPage() {
     });
 
     // Como é o próprio administrador lançando, já confirma e baixa imediatamente!
-    setTimeout(() => {
-      confirmPaymentAndInspection(
-        selectedPaymentForInspection.id,
-        "Lançamento manual de vistoria (galeria) e quitação direta realizada pelo Locador."
-      );
-    }, 100);
+    await confirmPaymentAndInspection(
+      selectedPaymentForInspection.id,
+      "Lançamento manual de vistoria (galeria) e quitação direta realizada pelo Locador."
+    );
 
     setIsInspectionModalOpen(false);
   };

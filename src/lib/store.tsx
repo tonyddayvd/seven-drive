@@ -98,7 +98,10 @@ interface SevenDriveContextType {
       odometro: string;
     };
     observacoes?: string;
-  }) => void;
+  }) => Promise<void>;
+
+  // Sincronização e Atualização Manual
+  refreshDataFromCloud: () => Promise<void>;
 
   // Manutenções
   addMaintenanceRule: (rule: Omit<MaintenanceRule, "id" | "created_at">) => void;
@@ -155,61 +158,63 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
   const [isCloudLoaded, setIsCloudLoaded] = useState(false);
 
   // 1. Carrega dados do Supabase na inicialização; Supabase é a fonte oficial da verdade
-  useEffect(() => {
-    async function loadData() {
-      const supabase = createClient();
+  const refreshDataFromCloud = async () => {
+    const supabase = createClient();
 
-      try {
-        const [
-          { data: cloudVehicles },
-          { data: cloudProfiles },
-          { data: cloudContracts },
-          { data: cloudPayments },
-          { data: cloudInspections },
-          { data: cloudMaintenances },
-          { data: cloudFines },
-          { data: cloudExpenses },
-          { data: cloudSettings },
-        ] = await Promise.all([
-          supabase.from("vehicles").select("*"),
-          supabase.from("profiles").select("*"),
-          supabase.from("contracts").select("*"),
-          supabase.from("payments").select("*"),
-          supabase.from("inspections").select("*"),
-          supabase.from("maintenances").select("*"),
-          supabase.from("fines").select("*"),
-          supabase.from("expenses").select("*"),
-          supabase.from("system_settings").select("*"),
-        ]);
+    try {
+      const [
+        { data: cloudVehicles },
+        { data: cloudProfiles },
+        { data: cloudContracts },
+        { data: cloudPayments },
+        { data: cloudInspections },
+        { data: cloudMaintenances },
+        { data: cloudFines },
+        { data: cloudExpenses },
+        { data: cloudSettings },
+      ] = await Promise.all([
+        supabase.from("vehicles").select("*"),
+        supabase.from("profiles").select("*"),
+        supabase.from("contracts").select("*"),
+        supabase.from("payments").select("*"),
+        supabase.from("inspections").select("*"),
+        supabase.from("maintenances").select("*"),
+        supabase.from("fines").select("*"),
+        supabase.from("expenses").select("*"),
+        supabase.from("system_settings").select("*"),
+      ]);
 
-        if (cloudVehicles !== null) {
-          // Dados retornados do Supabase com sucesso
-          setVehicles(cloudVehicles || []);
-          if (cloudProfiles && cloudProfiles.length > 0) {
-            setProfiles(cloudProfiles);
-            const adminProf = cloudProfiles.find((p: any) => p.role === "admin");
-            if (adminProf?.contato_emergencia?.startsWith("pwd:")) {
-              const remotePass = adminProf.contato_emergencia.replace("pwd:", "");
-              if (remotePass) {
-                setAdminPasswordState(remotePass);
-                if (typeof window !== "undefined") {
+      if (cloudVehicles !== null) {
+        // Dados retornados do Supabase com sucesso
+        setVehicles(cloudVehicles || []);
+        if (cloudProfiles && cloudProfiles.length > 0) {
+          setProfiles(cloudProfiles);
+          const adminProf = cloudProfiles.find((p: any) => p.role === "admin");
+          if (adminProf?.contato_emergencia?.startsWith("pwd:")) {
+            const remotePass = adminProf.contato_emergencia.replace("pwd:", "");
+            if (remotePass) {
+              setAdminPasswordState(remotePass);
+              if (typeof window !== "undefined") {
+                try {
                   localStorage.setItem("sevendrive_admin_pass", remotePass);
-                }
+                } catch {}
               }
             }
-          } else {
-            setProfiles(initialProfiles);
           }
-          setContracts(cloudContracts || []);
-          setPayments(cloudPayments || []);
-          setInspections(cloudInspections || []);
-          setMaintenances(cloudMaintenances || []);
-          setFines(cloudFines || []);
-          setExpenses(cloudExpenses || []);
-          if (cloudSettings && cloudSettings.length > 0) setSettings(cloudSettings[0] as any);
         } else {
-          // Fallback somente se offline / sem conexão com o Supabase
-          if (typeof window !== "undefined") {
+          setProfiles(initialProfiles);
+        }
+        setContracts(cloudContracts || []);
+        setPayments(cloudPayments || []);
+        setInspections(cloudInspections || []);
+        setMaintenances(cloudMaintenances || []);
+        setFines(cloudFines || []);
+        setExpenses(cloudExpenses || []);
+        if (cloudSettings && cloudSettings.length > 0) setSettings(cloudSettings[0] as any);
+      } else {
+        // Fallback somente se offline / sem conexão com o Supabase
+        if (typeof window !== "undefined") {
+          try {
             const savedVehicles = localStorage.getItem("sevendrive_vehicles");
             const savedProfiles = localStorage.getItem("sevendrive_profiles");
             const savedContracts = localStorage.getItem("sevendrive_contracts");
@@ -229,15 +234,19 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
             if (savedFines) setFines(JSON.parse(savedFines));
             if (savedExpenses) setExpenses(JSON.parse(savedExpenses));
             if (savedSettings) setSettings(JSON.parse(savedSettings));
+          } catch (storageReadErr) {
+            console.warn("Aviso ao ler do cache local:", storageReadErr);
           }
         }
-      } catch (err) {
-        console.error("Erro conectando com Supabase, usando persistência local:", err);
-      } finally {
-        setIsCloudLoaded(true);
       }
+    } catch (err) {
+      console.error("Erro conectando com Supabase, usando persistência local:", err);
+    } finally {
+      setIsCloudLoaded(true);
+    }
 
-      if (typeof window !== "undefined") {
+    if (typeof window !== "undefined") {
+      try {
         const sessionAuth = sessionStorage.getItem("sevendrive_admin_auth");
         if (sessionAuth === "true") {
           setIsAdminAuthenticated(true);
@@ -247,10 +256,12 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
         if (savedPass) {
           setAdminPasswordState(savedPass);
         }
-      }
+      } catch {}
     }
+  };
 
-    loadData();
+  useEffect(() => {
+    refreshDataFromCloud();
   }, []);
 
   // Salva no Supabase e no localStorage sempre que houver alterações
@@ -258,17 +269,35 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     if (!isCloudLoaded) return;
 
     if (typeof window !== "undefined") {
-      localStorage.setItem("sevendrive_vehicles", JSON.stringify(vehicles));
-      localStorage.setItem("sevendrive_profiles", JSON.stringify(profiles));
-      localStorage.setItem("sevendrive_contracts", JSON.stringify(contracts));
-      localStorage.setItem("sevendrive_payments", JSON.stringify(payments));
-      localStorage.setItem("sevendrive_inspections", JSON.stringify(inspections));
-      localStorage.setItem("sevendrive_maintenances", JSON.stringify(maintenances));
-      localStorage.setItem("sevendrive_fines", JSON.stringify(fines));
-      localStorage.setItem("sevendrive_expenses", JSON.stringify(expenses));
-      localStorage.setItem("sevendrive_settings", JSON.stringify(settings));
-      sessionStorage.setItem("sevendrive_admin_auth", String(isAdminAuthenticated));
-      localStorage.setItem("sevendrive_admin_pass", adminPassword);
+      try {
+        localStorage.setItem("sevendrive_vehicles", JSON.stringify(vehicles));
+        localStorage.setItem("sevendrive_profiles", JSON.stringify(profiles));
+        localStorage.setItem("sevendrive_contracts", JSON.stringify(contracts));
+        localStorage.setItem("sevendrive_payments", JSON.stringify(payments));
+        localStorage.setItem("sevendrive_inspections", JSON.stringify(inspections));
+        localStorage.setItem("sevendrive_maintenances", JSON.stringify(maintenances));
+        localStorage.setItem("sevendrive_fines", JSON.stringify(fines));
+        localStorage.setItem("sevendrive_expenses", JSON.stringify(expenses));
+        localStorage.setItem("sevendrive_settings", JSON.stringify(settings));
+        sessionStorage.setItem("sevendrive_admin_auth", String(isAdminAuthenticated));
+        localStorage.setItem("sevendrive_admin_pass", adminPassword);
+      } catch (quotaErr) {
+        console.warn("LocalStorage atingiu cota de armazenamento, preservando funcionamento:", quotaErr);
+        try {
+          // Salva dados sem campos de fotos pesadas para não estourar a memória local do navegador
+          const lightInspections = inspections.slice(0, 3).map((i) => ({
+            id: i.id,
+            payment_id: i.payment_id,
+            vehicle_id: i.vehicle_id,
+            driver_id: i.driver_id,
+            km_registrado: i.km_registrado,
+            status_conferencia: i.status_conferencia,
+            observacoes: i.observacoes,
+            created_at: i.created_at,
+          }));
+          localStorage.setItem("sevendrive_inspections", JSON.stringify(lightInspections));
+        } catch {}
+      }
     }
 
     // Persistência em Nuvem (Supabase)
@@ -419,18 +448,30 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     setActiveAlerts(alerts);
   }, [vehicles, maintenanceRules, maintenances]);
 
-  // Disparo de Notificação no Navegador
+  // Disparo de Notificação no Navegador (Compatível e seguro para Mobile e Desktop)
   const triggerBrowserNotification = (title: string, body: string) => {
-    if (typeof window !== "undefined" && "Notification" in window) {
-      if (Notification.permission === "granted") {
-        new Notification(title, { body });
-      } else if (Notification.permission !== "denied") {
-        Notification.requestPermission().then((permission) => {
-          if (permission === "granted") {
+    try {
+      if (typeof window !== "undefined" && "Notification" in window) {
+        if (Notification.permission === "granted") {
+          try {
             new Notification(title, { body });
+          } catch {
+            // Em navegadores móveis, new Notification pode requerer ServiceWorkerRegistration
           }
-        });
+        } else if (Notification.permission !== "denied") {
+          Notification.requestPermission()
+            .then((permission) => {
+              if (permission === "granted") {
+                try {
+                  new Notification(title, { body });
+                } catch {}
+              }
+            })
+            .catch(() => {});
+        }
       }
+    } catch (err) {
+      console.warn("Disparo de notificação omitido suavemente:", err);
     }
   };
 
@@ -678,7 +719,7 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
   };
 
   // Wizard do Locatário
-  const submitPaymentAndInspection = (data: {
+  const submitPaymentAndInspection = async (data: {
     paymentId: string;
     receiptUrl: string;
     kmRegistrado: number;
@@ -711,6 +752,7 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
       status_conferencia: "pendente",
       created_at: new Date().toISOString(),
     };
+
     setInspections((prev) => [newInspection, ...prev]);
 
     setPayments((prev) =>
@@ -727,6 +769,22 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
       )
     );
 
+    // Salva imediatamente no banco na nuvem (Supabase)
+    try {
+      const supabase = createClient();
+      await Promise.allSettled([
+        supabase.from("inspections").upsert([newInspection]),
+        supabase.from("payments").update({
+          status: "pendente_conferencia",
+          comprovante_url: data.receiptUrl,
+          data_pagamento: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }).eq("id", data.paymentId),
+      ]);
+    } catch (cloudErr) {
+      console.warn("Aviso ao sincronizar vistoria e pagamento no Supabase:", cloudErr);
+    }
+
     triggerBrowserNotification(
       "Seven Drive - Novo Pagamento Enviado",
       `O motorista enviou comprovante e vistoria (${data.kmRegistrado} km) para conferência.`
@@ -734,21 +792,19 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
   };
 
   // Dupla Checagem: Confirmar e Dar Baixa
-  const confirmPaymentAndInspection = (paymentId: string, observation?: string) => {
+  const confirmPaymentAndInspection = async (paymentId: string, observation?: string) => {
     const payment = payments.find((p) => p.id === paymentId);
     if (!payment) return;
 
+    const updatedPayment = {
+      ...payment,
+      status: "confirmado" as const,
+      observacao_admin: observation || "Confirmado e baixado pelo Locador.",
+      updated_at: new Date().toISOString(),
+    };
+
     setPayments((prev) =>
-      prev.map((p) =>
-        p.id === paymentId
-          ? {
-              ...p,
-              status: "confirmado",
-              observacao_admin: observation || "Confirmado e baixado pelo Locador.",
-              updated_at: new Date().toISOString(),
-            }
-          : p
-      )
+      prev.map((p) => (p.id === paymentId ? updatedPayment : p))
     );
 
     const inspection = inspections.find((i) => i.payment_id === paymentId);
@@ -763,25 +819,41 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
         });
       }
     }
+
+    try {
+      const supabase = createClient();
+      await Promise.allSettled([
+        supabase.from("payments").update({
+          status: "confirmado",
+          observacao_admin: observation || "Confirmado e baixado pelo Locador.",
+          updated_at: new Date().toISOString(),
+        }).eq("id", paymentId),
+        inspection
+          ? supabase.from("inspections").update({
+              status_conferencia: "aprovada",
+            }).eq("id", inspection.id)
+          : Promise.resolve(),
+      ]);
+    } catch (err) {
+      console.warn("Aviso ao atualizar confirmação no Supabase:", err);
+    }
   };
 
   // Dupla Checagem: Recusar Intenção de Pagamento com Motivo
-  const rejectPaymentAndInspection = (paymentId: string, reason: string) => {
+  const rejectPaymentAndInspection = async (paymentId: string, reason: string) => {
     const payment = payments.find((p) => p.id === paymentId);
     if (!payment) return;
 
+    const updatedPayment = {
+      ...payment,
+      status: "recusado" as const,
+      motivo_recusa: reason,
+      observacao_admin: `Recusado pelo Locador: ${reason}`,
+      updated_at: new Date().toISOString(),
+    };
+
     setPayments((prev) =>
-      prev.map((p) =>
-        p.id === paymentId
-          ? {
-              ...p,
-              status: "recusado",
-              motivo_recusa: reason,
-              observacao_admin: `Recusado pelo Locador: ${reason}`,
-              updated_at: new Date().toISOString(),
-            }
-          : p
-      )
+      prev.map((p) => (p.id === paymentId ? updatedPayment : p))
     );
 
     const inspection = inspections.find((i) => i.payment_id === paymentId);
@@ -789,6 +861,25 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
       setInspections((prev) =>
         prev.map((i) => (i.id === inspection.id ? { ...i, status_conferencia: "rejeitada" } : i))
       );
+    }
+
+    try {
+      const supabase = createClient();
+      await Promise.allSettled([
+        supabase.from("payments").update({
+          status: "recusado",
+          motivo_recusa: reason,
+          observacao_admin: `Recusado pelo Locador: ${reason}`,
+          updated_at: new Date().toISOString(),
+        }).eq("id", paymentId),
+        inspection
+          ? supabase.from("inspections").update({
+              status_conferencia: "rejeitada",
+            }).eq("id", inspection.id)
+          : Promise.resolve(),
+      ]);
+    } catch (err) {
+      console.warn("Aviso ao atualizar recusa no Supabase:", err);
     }
 
     triggerBrowserNotification(
@@ -976,6 +1067,7 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
         updateSettings,
         getVehicleFinancialSummary,
         triggerBrowserNotification,
+        refreshDataFromCloud,
       }}
     >
       {children}
