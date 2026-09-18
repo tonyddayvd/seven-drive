@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useSevenDrive } from "@/lib/store";
 import { Payment } from "@/types/database";
 import { formatCurrency, formatDate, formatPlate, isPaymentLate } from "@/lib/utils";
+import { InspectionStep, InspectionPhotos } from "@/components/inspection-camera/InspectionStep";
 import {
   DollarSign,
   Plus,
@@ -16,6 +17,10 @@ import {
   Search,
   X,
   Check,
+  Camera,
+  Upload,
+  Image as ImageIcon,
+  Sparkles,
 } from "lucide-react";
 
 export default function PagamentosPage() {
@@ -26,12 +31,85 @@ export default function PagamentosPage() {
     addPayment,
     updatePayment,
     deletePayment,
+    submitPaymentAndInspection,
+    confirmPaymentAndInspection,
   } = useSevenDrive();
 
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
+
+  // Modal de Lançamento Completo com Vistoria (Admin pode usar Galeria!)
+  const [isInspectionModalOpen, setIsInspectionModalOpen] = useState(false);
+  const [selectedPaymentForInspection, setSelectedPaymentForInspection] = useState<Payment | null>(null);
+  const [adminInspectionKM, setAdminInspectionKM] = useState<number>(0);
+  const [adminReceiptUrl, setAdminReceiptUrl] = useState<string>("");
+  const [adminReceiptFileName, setAdminReceiptFileName] = useState<string>("");
+  const [adminPhotos, setAdminPhotos] = useState<InspectionPhotos>({
+    frente: "",
+    lateralEsq: "",
+    lateralDir: "",
+    traseira: "",
+    interior: "",
+    odometro: "",
+  });
+  const [adminObs, setAdminObs] = useState("");
+
+  const handleOpenInspectionForPayment = (payment: Payment) => {
+    setSelectedPaymentForInspection(payment);
+    const v = vehicles.find((veh) => veh.id === payment.vehicle_id);
+    setAdminInspectionKM(v?.km_atual || 0);
+    setAdminReceiptUrl(payment.comprovante_url || "");
+    setAdminReceiptFileName(payment.comprovante_url ? "comprovante_existente" : "");
+    setAdminPhotos({
+      frente: "",
+      lateralEsq: "",
+      lateralDir: "",
+      traseira: "",
+      interior: "",
+      odometro: "",
+    });
+    setAdminObs("Lançado e conferido diretamente pelo Administrador.");
+    setIsInspectionModalOpen(true);
+  };
+
+  const handleAdminReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setAdminReceiptFileName(file.name);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setAdminReceiptUrl(event.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveAdminInspectionAndConfirm = () => {
+    if (!selectedPaymentForInspection) return;
+
+    // Submete a vistoria e comprovante
+    submitPaymentAndInspection({
+      paymentId: selectedPaymentForInspection.id,
+      receiptUrl: adminReceiptUrl || "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=400&q=80",
+      kmRegistrado: adminInspectionKM,
+      photos: adminPhotos,
+      observacoes: adminObs,
+    });
+
+    // Como é o próprio administrador lançando, já confirma e baixa imediatamente!
+    setTimeout(() => {
+      confirmPaymentAndInspection(
+        selectedPaymentForInspection.id,
+        "Lançamento manual de vistoria (galeria) e quitação direta realizada pelo Locador."
+      );
+    }, 100);
+
+    setIsInspectionModalOpen(false);
+  };
 
   // Form State
   const [formData, setFormData] = useState({
@@ -245,6 +323,14 @@ export default function PagamentosPage() {
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
+                          onClick={() => handleOpenInspectionForPayment(p)}
+                          className="flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-950/60 hover:bg-blue-900/80 text-blue-300 border border-blue-800/80 text-[11px] font-bold transition"
+                          title="Lançar Vistoria / Fotos da Galeria e Dar Baixa Direta"
+                        >
+                          <Camera className="w-3.5 h-3.5 text-blue-400" />
+                          <span className="hidden sm:inline">Vistoria / Galeria</span>
+                        </button>
+                        <button
                           onClick={() => handleOpenEdit(p)}
                           className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition"
                           title="Editar Pagamento"
@@ -401,6 +487,125 @@ export default function PagamentosPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE VISTORIA DO ADMINISTRADOR (COM GALERIA & BAIXA DIRETA) */}
+      {isInspectionModalOpen && selectedPaymentForInspection && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+          <div className="w-full max-w-3xl bg-zinc-900 border border-blue-500/50 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 my-8 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between pb-4 border-b border-zinc-800">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-bold uppercase tracking-wider mb-1">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  Lançamento de Vistoria pelo Administrador
+                </div>
+                <h3 className="text-xl font-black text-white">
+                  Lançar Vistoria & Quitar Pagamento Direto
+                </h3>
+                <p className="text-xs text-zinc-400 mt-1">
+                  Como administrador, você pode <strong>carregar fotos direto da galeria do celular ou computador</strong> sem depender do motorista.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setIsInspectionModalOpen(false)}
+                className="p-1.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Informações do Pagamento Selecionado */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-zinc-950 p-3.5 rounded-2xl border border-zinc-800 text-xs">
+              <div>
+                <span className="text-zinc-500 block">Motorista:</span>
+                <span className="font-bold text-white">
+                  {profiles.find((p) => p.id === selectedPaymentForInspection.driver_id)?.full_name}
+                </span>
+              </div>
+              <div>
+                <span className="text-zinc-500 block">Veículo / Placa:</span>
+                <span className="font-mono font-bold text-white">
+                  {formatPlate(vehicles.find((v) => v.id === selectedPaymentForInspection.vehicle_id)?.placa)}
+                </span>
+              </div>
+              <div>
+                <span className="text-zinc-500 block">Valor da Parcela:</span>
+                <span className="font-black text-emerald-400">
+                  {formatCurrency(selectedPaymentForInspection.valor)}
+                </span>
+              </div>
+              <div>
+                <span className="text-zinc-500 block">Vencimento:</span>
+                <span className="font-bold text-white">
+                  {formatDate(selectedPaymentForInspection.data_vencimento)}
+                </span>
+              </div>
+            </div>
+
+            {/* Anexar Comprovante Bancário (Opcional no Admin) */}
+            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 space-y-3">
+              <label className="block text-xs font-bold text-zinc-300">
+                Comprovante Bancário (Galeria / Arquivo):
+              </label>
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                <label className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 font-bold text-xs cursor-pointer transition">
+                  <Upload className="w-4 h-4 text-blue-400" />
+                  <span>{adminReceiptFileName || "Selecionar Comprovante"}</span>
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={handleAdminReceiptUpload}
+                    className="hidden"
+                  />
+                </label>
+                {adminReceiptUrl && (
+                  <span className="text-[11px] text-emerald-400 flex items-center gap-1 font-semibold">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Comprovante carregado
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Vistoria com 6 Fotos (allowGallery=true) */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <ImageIcon className="w-4 h-4 text-purple-400" />
+                Vistoria Digital das 6 Fotos (Upload via Galeria Liberado)
+              </h4>
+
+              <InspectionStep
+                currentKM={adminInspectionKM}
+                onKMChange={setAdminInspectionKM}
+                photos={adminPhotos}
+                onPhotosChange={setAdminPhotos}
+                observacoes={adminObs}
+                onObservacoesChange={setAdminObs}
+                allowGallery={true}
+              />
+            </div>
+
+            {/* Ações */}
+            <div className="pt-4 border-t border-zinc-800 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsInspectionModalOpen(false)}
+                className="px-5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveAdminInspectionAndConfirm}
+                className="flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-lg shadow-emerald-600/30 transition"
+              >
+                <Check className="w-4 h-4" />
+                <span>Salvar Vistoria e Confirmar Pagamento Imediatamente</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

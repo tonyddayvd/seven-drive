@@ -50,20 +50,18 @@ export default function PagarWizardPage() {
 
   // Estados do Wizard
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
-  const [receiptUrl, setReceiptUrl] = useState<string>(
-    "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=400&q=80"
-  );
-  const [receiptFileName, setReceiptFileName] = useState<string>("comprovante_pix.pdf");
+  const [receiptUrl, setReceiptUrl] = useState<string>("");
+  const [receiptFileName, setReceiptFileName] = useState<string>("");
 
   // Vistoria
-  const [currentKM, setCurrentKM] = useState<number>(vehicle ? vehicle.km_atual + 150 : 38000);
+  const [currentKM, setCurrentKM] = useState<number>(vehicle ? vehicle.km_atual : 0);
   const [photos, setPhotos] = useState<InspectionPhotos>({
-    frente: "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=500&q=80",
-    lateralEsq: "https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=500&q=80",
-    lateralDir: "https://images.unsplash.com/photo-1542362567-b07e5359a973?w=500&q=80",
-    traseira: "https://images.unsplash.com/photo-1583121274602-3e2820c69888?w=500&q=80",
-    interior: "https://images.unsplash.com/photo-1563720223185-11003d516935?w=500&q=80",
-    odometro: "https://images.unsplash.com/photo-1563720223185-11003d516935?w=500&q=80",
+    frente: "",
+    lateralEsq: "",
+    lateralDir: "",
+    traseira: "",
+    interior: "",
+    odometro: "",
   });
   const [observacoes, setObservacoes] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -160,21 +158,35 @@ export default function PagarWizardPage() {
           { step: 1, label: "1. PIX & QR Code" },
           { step: 2, label: "2. Comprovante" },
           { step: 3, label: "3. Vistoria (6 Fotos)" },
-        ].map((item) => (
-          <button
-            key={item.step}
-            onClick={() => setCurrentStep(item.step as any)}
-            className={`py-3 px-2 rounded-xl text-center border transition-all ${
-              currentStep === item.step
-                ? "bg-blue-600 border-blue-500 text-white font-bold shadow-md shadow-blue-900/30"
-                : currentStep > item.step
-                ? "bg-emerald-950/40 border-emerald-500/50 text-emerald-300"
-                : "bg-zinc-900 border-zinc-800 text-zinc-500"
-            }`}
-          >
-            <span className="text-xs block">{item.label}</span>
-          </button>
-        ))}
+        ].map((item) => {
+          const isAccessible =
+            item.step === 1 ||
+            (item.step === 2) ||
+            (item.step === 3 && isReceiptValid);
+
+          return (
+            <button
+              key={item.step}
+              type="button"
+              disabled={!isAccessible}
+              onClick={() => {
+                if (item.step === 3 && !isReceiptValid) return;
+                setCurrentStep(item.step as any);
+              }}
+              className={`py-3 px-2 rounded-xl text-center border transition-all ${
+                currentStep === item.step
+                  ? "bg-blue-600 border-blue-500 text-white font-bold shadow-md shadow-blue-900/30"
+                  : currentStep > item.step
+                  ? "bg-emerald-950/40 border-emerald-500/50 text-emerald-300"
+                  : isAccessible
+                  ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
+                  : "bg-zinc-950 border-zinc-900 text-zinc-600 cursor-not-allowed"
+              }`}
+            >
+              <span className="text-xs block">{item.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Conteúdo da Etapa Atual */}
@@ -284,10 +296,22 @@ export default function PagarWizardPage() {
                 <span>Voltar</span>
               </button>
 
+              {!isReceiptValid && (
+                <div className="text-xs text-amber-400 font-semibold flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4 text-amber-400" />
+                  <span>Anexe o comprovante para poder avançar</span>
+                </div>
+              )}
+
               <button
                 type="button"
+                disabled={!isReceiptValid}
                 onClick={() => setCurrentStep(3)}
-                className="flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-lg shadow-blue-600/30 transition"
+                className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm shadow-lg transition ${
+                  isReceiptValid
+                    ? "bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/30"
+                    : "bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700"
+                }`}
               >
                 <span>Avançar para Vistoria Digital</span>
                 <ArrowRight className="w-4 h-4" />

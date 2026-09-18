@@ -62,9 +62,10 @@ export interface Payment {
   valor: number;
   data_vencimento: string;
   data_pagamento?: string | null;
-  status: 'pendente_envio' | 'pendente_conferencia' | 'confirmado' | 'atrasado';
+  status: 'pendente_envio' | 'pendente_conferencia' | 'confirmado' | 'atrasado' | 'recusado';
   comprovante_url?: string | null;
   observacao_admin?: string | null;
+  motivo_recusa?: string | null;
   semana_ano?: string | null;
   created_at: string;
   updated_at: string;

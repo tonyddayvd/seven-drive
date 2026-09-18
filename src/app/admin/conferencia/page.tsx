@@ -23,6 +23,7 @@ export default function ConferenciaPage() {
     vehicles,
     profiles,
     confirmPaymentAndInspection,
+    rejectPaymentAndInspection,
   } = useSevenDrive();
 
   // Pagamentos que estão na fila de conferência
@@ -33,6 +34,11 @@ export default function ConferenciaPage() {
   );
   const [adminObservation, setAdminObservation] = useState("");
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Modal de Recusa
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
 
   const currentPayment = payments.find((p) => p.id === selectedPaymentId);
   const currentInspection = inspections.find((i) => i.payment_id === selectedPaymentId);
@@ -62,6 +68,27 @@ export default function ConferenciaPage() {
     }, 6000);
   };
 
+  const handleRejectSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPaymentId || !rejectReason.trim()) return;
+
+    rejectPaymentAndInspection(selectedPaymentId, rejectReason.trim());
+
+    setErrorMessage(
+      `Intenção de pagamento de ${formatCurrency(currentPayment?.valor)} foi RECUSADA. O motorista foi notificado do motivo: "${rejectReason.trim()}".`
+    );
+
+    setIsRejectModalOpen(false);
+    setRejectReason("");
+
+    const remaining = pendingPayments.filter((p) => p.id !== selectedPaymentId);
+    setSelectedPaymentId(remaining[0]?.id || null);
+
+    setTimeout(() => {
+      setErrorMessage(null);
+    }, 8000);
+  };
+
   return (
     <div className="space-y-6">
       {/* Cabeçalho */}
@@ -86,6 +113,14 @@ export default function ConferenciaPage() {
         <div className="p-4 rounded-xl bg-emerald-950/60 border border-emerald-500/60 text-emerald-200 flex items-center gap-3 animate-fade-in">
           <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
           <span className="text-xs font-semibold">{successMessage}</span>
+        </div>
+      )}
+
+      {/* Alerta de Recusa */}
+      {errorMessage && (
+        <div className="p-4 rounded-xl bg-red-950/60 border border-red-500/60 text-red-200 flex items-center gap-3 animate-fade-in">
+          <XCircle className="w-5 h-5 text-red-400 shrink-0" />
+          <span className="text-xs font-semibold">{errorMessage}</span>
         </div>
       )}
 
@@ -299,8 +334,20 @@ export default function ConferenciaPage() {
                   />
                 </div>
 
-                {/* BOTÃO DE CONFIRMAR E DAR BAIXA */}
+                {/* BOTÕES DE CONFIRMAR E RECUSAR */}
                 <div className="pt-2 border-t border-zinc-800 flex flex-col sm:flex-row items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRejectReason("");
+                      setIsRejectModalOpen(true);
+                    }}
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800 text-xs font-bold transition"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    <span>Recusar Intenção de Pagamento</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={handleConfirm}
@@ -312,6 +359,77 @@ export default function ConferenciaPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE RECUSA COM MOTIVO OBRIGATÓRIO */}
+      {isRejectModalOpen && currentPayment && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-zinc-900 border border-red-500/50 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-red-500/10 text-red-400 flex items-center justify-center shrink-0">
+                  <XCircle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    Recusar Intenção de Pagamento
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    {currentDriver?.full_name} • {formatCurrency(currentPayment.valor)}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRejectModalOpen(false)}
+                className="text-zinc-500 hover:text-white p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              Explique o motivo da recusa (ex: comprovante ilegível, valor não caiu na conta, foto do odômetro cortada, etc). Esta mensagem aparecerá para o motorista para que ele possa corrigir e reenviar.
+            </p>
+
+            <form onSubmit={handleRejectSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-zinc-200 mb-1.5">
+                  Motivo da Recusa (Obrigatório) <span className="text-red-500">*</span>:
+                </label>
+                <textarea
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="Ex: O comprovante enviado está ilegível ou o valor de R$ 650,00 não foi identificado no extrato bancário. Por favor, reenvie o comprovante correto."
+                  rows={4}
+                  required
+                  className="w-full bg-zinc-950 border border-zinc-700 focus:border-red-500 focus:ring-1 focus:ring-red-500 rounded-xl p-3 text-xs text-white placeholder-zinc-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setIsRejectModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!rejectReason.trim()}
+                  className={`px-5 py-2.5 rounded-xl text-xs font-bold transition ${
+                    rejectReason.trim()
+                      ? "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30"
+                      : "bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700"
+                  }`}
+                >
+                  Confirmar Recusa
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -1,7 +1,6 @@
-"use client";
-
 import React, { useState } from "react";
-import { Camera, Check, Upload, AlertCircle, Info, Image as ImageIcon } from "lucide-react";
+import { Camera, Check, Upload, AlertCircle, Info, Image as ImageIcon, Sparkles } from "lucide-react";
+import { CarDiagramIllustration } from "./CarDiagrams";
 
 export interface InspectionPhotos {
   frente: string;
@@ -19,6 +18,7 @@ interface InspectionStepProps {
   onPhotosChange: (photos: InspectionPhotos) => void;
   observacoes: string;
   onObservacoesChange: (obs: string) => void;
+  allowGallery?: boolean;
 }
 
 export function InspectionStep({
@@ -28,6 +28,7 @@ export function InspectionStep({
   onPhotosChange,
   observacoes,
   onObservacoesChange,
+  allowGallery = false,
 }: InspectionStepProps) {
   const photoSlots = [
     { key: "frente", label: "Frente do Veículo", desc: "Foto frontal completa pegando a placa" },
@@ -152,28 +153,54 @@ export function InspectionStep({
                       <input
                         type="file"
                         accept="image/*"
-                        capture="environment"
+                        {...(!allowGallery ? { capture: "environment" } : {})}
                         onChange={(e) => handleFileUpload(slot.key as keyof InspectionPhotos, e)}
                         className="hidden"
                       />
                     </label>
                   </div>
                 ) : (
-                  <label className="border-2 border-dashed border-zinc-700 hover:border-blue-500 rounded-lg p-4 flex flex-col items-center justify-center gap-2 cursor-pointer bg-zinc-800/40 hover:bg-zinc-800 transition aspect-video">
-                    <div className="w-10 h-10 rounded-full bg-zinc-700/60 flex items-center justify-center text-zinc-300">
-                      <Camera className="w-5 h-5" />
+                  <div className="space-y-2">
+                    {/* Desenho/Diagrama de Exemplo do Ângulo */}
+                    <div className="rounded-lg overflow-hidden border border-zinc-800 bg-zinc-950 aspect-video relative group">
+                      <CarDiagramIllustration
+                        angle={slot.key as any}
+                        className="w-full h-full object-contain p-1"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-2">
+                        <span className="text-[10px] text-zinc-300 font-semibold flex items-center gap-1">
+                          <Sparkles className="w-3 h-3 text-amber-400" />
+                          Exemplo do enquadramento
+                        </span>
+                      </div>
                     </div>
-                    <span className="text-xs font-medium text-zinc-300 text-center">
-                      Tirar foto ou selecionar
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      onChange={(e) => handleFileUpload(slot.key as keyof InspectionPhotos, e)}
-                      className="hidden"
-                    />
-                  </label>
+
+                    {/* Botão de Captura: Câmera para Motorista / Galeria para Admin */}
+                    <label className="border-2 border-dashed border-blue-500/50 hover:border-blue-400 bg-blue-950/20 hover:bg-blue-950/40 rounded-xl p-3 flex items-center justify-center gap-2 cursor-pointer transition">
+                      {allowGallery ? (
+                        <>
+                          <ImageIcon className="w-4 h-4 text-purple-400 shrink-0" />
+                          <span className="text-xs font-bold text-purple-300">
+                            Selecionar da Galeria / Câmera
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <Camera className="w-4 h-4 text-blue-400 shrink-0" />
+                          <span className="text-xs font-bold text-blue-300">
+                            Tirar Foto Obrigatória
+                          </span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        {...(!allowGallery ? { capture: "environment" } : {})}
+                        onChange={(e) => handleFileUpload(slot.key as keyof InspectionPhotos, e)}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
                 )}
               </div>
             );

@@ -82,6 +82,7 @@ interface SevenDriveContextType {
   updatePayment: (id: string, updates: Partial<Payment>) => void;
   deletePayment: (id: string) => void;
   confirmPaymentAndInspection: (paymentId: string, observation?: string) => void;
+  rejectPaymentAndInspection: (paymentId: string, reason: string) => void;
 
   // Wizard do Locatário
   submitPaymentAndInspection: (data: {
@@ -764,6 +765,38 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     }
   };
 
+  // Dupla Checagem: Recusar Intenção de Pagamento com Motivo
+  const rejectPaymentAndInspection = (paymentId: string, reason: string) => {
+    const payment = payments.find((p) => p.id === paymentId);
+    if (!payment) return;
+
+    setPayments((prev) =>
+      prev.map((p) =>
+        p.id === paymentId
+          ? {
+              ...p,
+              status: "recusado",
+              motivo_recusa: reason,
+              observacao_admin: `Recusado pelo Locador: ${reason}`,
+              updated_at: new Date().toISOString(),
+            }
+          : p
+      )
+    );
+
+    const inspection = inspections.find((i) => i.payment_id === paymentId);
+    if (inspection) {
+      setInspections((prev) =>
+        prev.map((i) => (i.id === inspection.id ? { ...i, status_conferencia: "rejeitada" } : i))
+      );
+    }
+
+    triggerBrowserNotification(
+      "Seven Drive - Pagamento Recusado",
+      `A intenção de pagamento foi recusada pelo locador. Motivo: ${reason}`
+    );
+  };
+
   // Manutenções
   const addMaintenanceRule = (ruleData: Omit<MaintenanceRule, "id" | "created_at">) => {
     const newRule: MaintenanceRule = {
@@ -928,6 +961,7 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
         updatePayment,
         deletePayment,
         confirmPaymentAndInspection,
+        rejectPaymentAndInspection,
         submitPaymentAndInspection,
         addMaintenanceRule,
         updateMaintenanceRule,

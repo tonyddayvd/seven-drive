@@ -49,9 +49,9 @@ export default function MotoristaPage() {
     (p) => (contract && p.contract_id === contract.id) || p.driver_id === activeDriver.id
   );
 
-  // 1. Prioriza pagamentos em aberto (pendente_envio, atrasado, pendente_conferencia) em ordem cronológica (mais antigo/próximo primeiro)
+  // 1. Prioriza pagamentos em aberto (pendente_envio, atrasado, pendente_conferencia, recusado) em ordem cronológica
   const openPayments = driverPayments
-    .filter((p) => p.status === "pendente_envio" || p.status === "atrasado" || p.status === "pendente_conferencia")
+    .filter((p) => p.status === "pendente_envio" || p.status === "atrasado" || p.status === "pendente_conferencia" || p.status === "recusado")
     .sort((a, b) => new Date(a.data_vencimento).getTime() - new Date(b.data_vencimento).getTime());
 
   // 2. Se não houver pendências em aberto, pega o mais recente já confirmado
@@ -187,6 +187,8 @@ export default function MotoristaPage() {
                       ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                       : currentPayment.status === "pendente_conferencia"
                       ? "bg-blue-500/10 text-blue-400 border-blue-500/20 animate-pulse"
+                      : currentPayment.status === "recusado"
+                      ? "bg-red-500/10 text-red-400 border-red-500/30 font-black animate-pulse"
                       : isLate
                       ? "bg-red-500/10 text-red-400 border-red-500/20 animate-pulse"
                       : "bg-amber-500/10 text-amber-400 border-amber-500/20"
@@ -196,6 +198,8 @@ export default function MotoristaPage() {
                     ? "Quitado / Aprovado"
                     : currentPayment.status === "pendente_conferencia"
                     ? "Em Conferência pelo Locador"
+                    : currentPayment.status === "recusado"
+                    ? "Envio Recusado pelo Locador"
                     : isLate
                     ? "Em Atraso (Regularize Agora)"
                     : "Aguardando Pagamento"}
@@ -203,6 +207,22 @@ export default function MotoristaPage() {
               );
             })()}
           </div>
+
+          {/* Aviso especial de Envio Recusado com o motivo */}
+          {currentPayment.status === "recusado" && (
+            <div className="p-4 rounded-xl bg-red-950/40 border border-red-800 text-xs text-red-200 space-y-1.5 animate-fade-in">
+              <div className="flex items-center gap-2 font-bold text-red-400">
+                <AlertTriangle className="w-4 h-4" />
+                <span>O locador recusou a sua conferência anterior:</span>
+              </div>
+              <p className="text-zinc-300 italic bg-black/40 p-2.5 rounded-lg border border-red-900/50">
+                &ldquo;{currentPayment.motivo_recusa || currentPayment.observacao_admin || "Comprovante ou vistoria pendente de correção."}&rdquo;
+              </p>
+              <span className="text-[11px] text-zinc-400 block pt-1">
+                Por favor, clique no botão abaixo para anexar o comprovante correto e reenviar as 6 fotos da vistoria.
+              </span>
+            </div>
+          )}
 
           <div className="flex justify-between items-center p-4 rounded-xl bg-zinc-950 border border-zinc-800">
             <div>
@@ -212,13 +232,13 @@ export default function MotoristaPage() {
               </span>
             </div>
 
-            {currentPayment.status === "pendente_envio" && (
+            {(currentPayment.status === "pendente_envio" || currentPayment.status === "recusado") && (
               <Link
                 href="/motorista/pagar"
                 className="flex items-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition"
               >
                 <CreditCard className="w-4 h-4" />
-                <span>Pagar & Vistoria</span>
+                <span>{currentPayment.status === "recusado" ? "Corrigir & Reenviar" : "Pagar & Vistoria"}</span>
                 <ArrowRight className="w-4 h-4" />
               </Link>
             )}

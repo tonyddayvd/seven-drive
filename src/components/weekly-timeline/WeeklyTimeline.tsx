@@ -121,6 +121,7 @@ export function WeeklyTimeline() {
           const hasOverdue = weekPayments.some(
             (p) => p.status === "atrasado" || (p.status === "pendente_envio" && isPaymentLate(p.data_vencimento, p.status))
           );
+          const hasRejected = weekPayments.some((p) => p.status === "recusado");
           const hasPending = weekPayments.some(
             (p) => p.status === "pendente_envio" || p.status === "pendente_conferencia"
           );
@@ -128,7 +129,7 @@ export function WeeklyTimeline() {
             weekPayments.length > 0 && weekPayments.every((p) => p.status === "confirmado");
 
           let statusType: "green" | "yellow" | "red" = "yellow";
-          if (hasOverdue) {
+          if (hasOverdue || hasRejected) {
             statusType = "red";
           } else if (allConfirmed) {
             statusType = "green";
@@ -211,6 +212,8 @@ export function WeeklyTimeline() {
                               ? "Pago"
                               : p.status === "pendente_conferencia"
                               ? "Conferir"
+                              : p.status === "recusado"
+                              ? "Recusado"
                               : "Pendente"}
                           </span>
                         </div>
