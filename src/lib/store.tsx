@@ -156,6 +156,8 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
 
   // Sincronização em Nuvem (Supabase) + Fallback LocalStorage
   const [isCloudLoaded, setIsCloudLoaded] = useState(false);
+  // Flag para evitar que dados recém-carregados do Supabase disparem um upsert de volta (race condition)
+  const skipNextSyncRef = React.useRef(false);
 
   // 1. Carrega dados do Supabase na inicialização; Supabase é a fonte oficial da verdade
   const refreshDataFromCloud = async () => {
@@ -185,6 +187,8 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
       ]);
 
       if (cloudVehicles !== null) {
+        // Sinaliza que os próximos sets são dados vindos da nuvem, NÃO devem disparar upsert de volta
+        skipNextSyncRef.current = true;
         // Dados retornados do Supabase com sucesso
         setVehicles(cloudVehicles || []);
         if (cloudProfiles && cloudProfiles.length > 0) {
@@ -301,6 +305,13 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     }
 
     // Persistência em Nuvem (Supabase)
+    // Pula o upsert se os dados acabaram de ser carregados do Supabase (evita sobrescrever dados de outro dispositivo)
+    if (skipNextSyncRef.current) {
+      // Reseta a flag após um breve delay para cobrir todo o batch de state updates do React
+      setTimeout(() => { skipNextSyncRef.current = false; }, 1500);
+      return;
+    }
+
     const supabase = createClient();
     async function syncToCloud() {
       try {
@@ -340,7 +351,7 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
 
   // Autenticação do Admin
   const loginAdmin = (password: string) => {
-    if (password === adminPassword || password === "admin123") {
+    if (password === adminPassword) {
       setIsAdminAuthenticated(true);
       if (typeof window !== "undefined") {
         sessionStorage.setItem("sevendrive_admin_auth", "true");
@@ -363,6 +374,15 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     if (typeof window !== "undefined") {
       localStorage.setItem("sevendrive_admin_pass", newPass);
     }
+    // Atualiza o campo contato_emergencia no estado local do profile admin
+    // para que o upsert genérico NÃO sobrescreva a senha com o valor antigo
+    setProfiles((prev) =>
+      prev.map((p) =>
+        p.role === "admin"
+          ? { ...p, contato_emergencia: `pwd:${newPass}`, updated_at: new Date().toISOString() }
+          : p
+      )
+    );
     // Sincroniza senha no banco através do profile do admin
     try {
       const supabase = createClient();
