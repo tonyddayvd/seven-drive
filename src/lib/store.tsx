@@ -209,7 +209,20 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
           setProfiles(initialProfiles);
         }
         setContracts(cloudContracts || []);
-        setPayments(cloudPayments || []);
+
+        // Traduz o status "recusado" que foi salvo como "pendente_envio" no banco devido à restrição do Supabase
+        const mappedPayments = (cloudPayments || []).map((p: any) => {
+          if (p.status === "pendente_envio" && p.observacao_admin?.startsWith("RECUSADO:")) {
+            return {
+              ...p,
+              status: "recusado",
+              motivo_recusa: p.observacao_admin.replace("RECUSADO: ", ""),
+            };
+          }
+          return p;
+        });
+        setPayments(mappedPayments);
+        
         setInspections(cloudInspections || []);
         setMaintenances(cloudMaintenances || []);
         setFines(cloudFines || []);
@@ -318,7 +331,23 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
         if (profiles.length) await supabase.from("profiles").upsert(profiles);
         if (vehicles.length) await supabase.from("vehicles").upsert(vehicles);
         if (contracts.length) await supabase.from("contracts").upsert(contracts);
-        if (payments.length) await supabase.from("payments").upsert(payments);
+        
+        if (payments.length) {
+          // Prepara para o Supabase mapeando o status "recusado" (que não existe na constraint do banco) para "pendente_envio"
+          const cloudSafePayments = payments.map(p => {
+            if (p.status === "recusado") {
+              const { motivo_recusa, ...rest } = p;
+              return {
+                ...rest,
+                status: "pendente_envio",
+                observacao_admin: `RECUSADO: ${motivo_recusa || ""}`
+              };
+            }
+            return p;
+          });
+          await supabase.from("payments").upsert(cloudSafePayments);
+        }
+        
         if (inspections.length) await supabase.from("inspections").upsert(inspections);
         if (maintenances.length) await supabase.from("maintenances").upsert(maintenances);
         if (fines.length) await supabase.from("fines").upsert(fines);
@@ -901,9 +930,10 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
       const supabase = createClient();
       await Promise.allSettled([
         supabase.from("payments").update({
-          status: "recusado",
-          motivo_recusa: reason,
-          observacao_admin: `Recusado pelo Locador: ${reason}`,
+          // O status "recusado" não existe na constraint do banco original, 
+          // então enviamos como pendente_envio e usamos a observação como flag
+          status: "pendente_envio",
+          observacao_admin: `RECUSADO: ${reason}`,
           updated_at: new Date().toISOString(),
         }).eq("id", paymentId),
         inspection
