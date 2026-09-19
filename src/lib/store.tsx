@@ -81,8 +81,9 @@ interface SevenDriveContextType {
   addPayment: (payment: Omit<Payment, "id" | "created_at" | "updated_at">) => void;
   updatePayment: (id: string, updates: Partial<Payment>) => void;
   deletePayment: (id: string) => void;
-  confirmPaymentAndInspection: (paymentId: string, observation?: string) => void;
-  rejectPaymentAndInspection: (paymentId: string, reason: string) => void;
+  confirmPaymentAndInspection: (paymentId: string, observation?: string) => Promise<void>;
+  rejectPaymentAndInspection: (paymentId: string, reason: string) => Promise<void>;
+  resetPaymentIntention: (paymentId: string, reason?: string) => Promise<void>;
 
   // Wizard do Locatário
   submitPaymentAndInspection: (data: {
@@ -1118,6 +1119,7 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
         deletePayment,
         confirmPaymentAndInspection,
         rejectPaymentAndInspection,
+        resetPaymentIntention,
         submitPaymentAndInspection,
         addMaintenanceRule,
         updateMaintenanceRule,

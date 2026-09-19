@@ -140,14 +140,27 @@ export default function MotoristaPage() {
             </p>
           </div>
 
-          <Link
-            href={`/motorista/pagar?id=${rejectedPayment.id}`}
-            className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs shadow-lg shadow-red-600/40 transition"
-          >
-            <CreditCard className="w-4 h-4" />
-            <span>Corrigir Comprovante / Fotos e Reenviar Agora</span>
-            <ArrowRight className="w-4 h-4" />
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href={`/motorista/pagar?id=${rejectedPayment.id}`}
+              className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs shadow-lg shadow-red-600/40 transition"
+            >
+              <CreditCard className="w-4 h-4" />
+              <span>Corrigir Comprovante / Fotos e Reenviar</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+            
+            <button
+              onClick={() => {
+                if (window.confirm("Tem certeza que deseja cancelar este envio? O pagamento voltará para pendente com o valor atualizado do contrato.")) {
+                  resetPaymentIntention(rejectedPayment.id, "Cancelado pelo Motorista");
+                }
+              }}
+              className="px-4 py-3.5 rounded-xl bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 font-bold text-xs transition flex items-center justify-center whitespace-nowrap"
+            >
+              Excluir
+            </button>
+          </div>
         </div>
       )}
 
@@ -292,14 +305,28 @@ export default function MotoristaPage() {
             </div>
 
             {(currentPayment.status === "pendente_envio" || currentPayment.status === "recusado") && (
-              <Link
-                href={`/motorista/pagar?id=${currentPayment.id}`}
-                className="flex items-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition"
-              >
-                <CreditCard className="w-4 h-4" />
-                <span>{currentPayment.status === "recusado" ? "Corrigir & Reenviar" : "Pagar & Vistoria"}</span>
-                <ArrowRight className="w-4 h-4" />
-              </Link>
+              <div className="flex gap-2">
+                <Link
+                  href={`/motorista/pagar?id=${currentPayment.id}`}
+                  className="flex items-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>{currentPayment.status === "recusado" ? "Corrigir & Reenviar" : "Pagar & Vistoria"}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+                {currentPayment.status === "recusado" && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm("Tem certeza que deseja cancelar este envio?")) {
+                        resetPaymentIntention(currentPayment.id, "Cancelado pelo Motorista");
+                      }
+                    }}
+                    className="px-4 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-bold text-xs transition"
+                  >
+                    Excluir
+                  </button>
+                )}
+              </div>
             )}
 
             {currentPayment.status === "pendente_conferencia" && (

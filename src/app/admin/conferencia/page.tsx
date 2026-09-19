@@ -27,6 +27,7 @@ export default function ConferenciaPage() {
     profiles,
     confirmPaymentAndInspection,
     rejectPaymentAndInspection,
+    resetPaymentIntention,
     refreshDataFromCloud,
   } = useSevenDrive();
 
@@ -41,9 +42,9 @@ export default function ConferenciaPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Modal de Recusa
-  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
+  // Modais de Ação
+  const [modalAction, setModalAction] = useState<'recusar' | 'excluir' | null>(null);
+  const [actionReason, setActionReason] = useState("");
 
   // Modal de Zoom de Imagem em Alta Resolução
   const [zoomImage, setZoomImage] = useState<{ url: string; title: string } | null>(null);
@@ -107,18 +108,24 @@ export default function ConferenciaPage() {
     }, 6000);
   };
 
-  const handleRejectSubmit = async (e: React.FormEvent) => {
+  const handleActionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPaymentId || !rejectReason.trim()) return;
+    if (!selectedPaymentId || !actionReason.trim() || !modalAction) return;
 
-    await rejectPaymentAndInspection(selectedPaymentId, rejectReason.trim());
+    if (modalAction === 'recusar') {
+      await rejectPaymentAndInspection(selectedPaymentId, actionReason.trim());
+      setErrorMessage(
+        `Intenção de pagamento de ${formatCurrency(currentPayment?.valor)} foi RECUSADA. O motorista foi notificado do motivo: "${actionReason.trim()}".`
+      );
+    } else {
+      await resetPaymentIntention(selectedPaymentId, actionReason.trim());
+      setErrorMessage(
+        `Intenção de pagamento de ${formatCurrency(currentPayment?.valor)} foi EXCLUÍDA. O sistema resetou o pagamento para que o motorista faça um novo envio com o valor mais atualizado.`
+      );
+    }
 
-    setErrorMessage(
-      `Intenção de pagamento de ${formatCurrency(currentPayment?.valor)} foi RECUSADA. O motorista foi notificado do motivo: "${rejectReason.trim()}".`
-    );
-
-    setIsRejectModalOpen(false);
-    setRejectReason("");
+    setModalAction(null);
+    setActionReason("");
 
     const remaining = pendingPayments.filter((p) => p.id !== selectedPaymentId);
     setSelectedPaymentId(remaining[0]?.id || null);
@@ -435,15 +442,23 @@ export default function ConferenciaPage() {
                   />
                 </div>
 
-                {/* AÇÕES: RECUSAR OU CONFIRMAR */}
+                {/* AÇÕES: EXCLUIR, RECUSAR OU CONFIRMAR */}
                 <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-4 border-t border-zinc-800">
                   <button
                     type="button"
-                    onClick={() => setIsRejectModalOpen(true)}
+                    onClick={() => setModalAction('excluir')}
+                    className="w-full sm:w-auto px-5 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 font-bold text-xs flex items-center justify-center gap-2 transition"
+                  >
+                    <span>Excluir Intenção</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setModalAction('recusar')}
                     className="w-full sm:w-auto px-5 py-3 rounded-xl bg-red-950/40 hover:bg-red-950/80 text-red-400 border border-red-800/80 font-bold text-xs flex items-center justify-center gap-2 transition"
                   >
                     <XCircle className="w-4 h-4" />
-                    <span>Recusar Intenção de Pagamento</span>
+                    <span>Recusar Intenção</span>
                   </button>
 
                   <button
@@ -492,46 +507,38 @@ export default function ConferenciaPage() {
         </div>
       )}
 
-      {/* MODAL DE RECUSA */}
-      {isRejectModalOpen && currentPayment && (
+      {/* MODAL DE RECUSA / EXCLUSÃO */}
+      {modalAction && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-red-500/50 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-scale-up">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-red-500/10 text-red-400 flex items-center justify-center shrink-0">
-                  <XCircle className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white">
-                    Recusar Intenção de Pagamento
-                  </h3>
-                  <p className="text-[11px] text-zinc-400">
-                    {currentDriver?.full_name} • {formatCurrency(currentPayment.valor)}
-                  </p>
-                </div>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                modalAction === 'recusar' ? 'bg-red-500/20 text-red-400' : 'bg-orange-500/20 text-orange-400'
+              }`}>
+                <AlertTriangle className="w-5 h-5" />
               </div>
-              <button
-                type="button"
-                onClick={() => setIsRejectModalOpen(false)}
-                className="text-zinc-500 hover:text-white p-1"
-              >
-                ✕
-              </button>
+              <div>
+                <h3 className="text-lg font-black text-white">
+                  {modalAction === 'recusar' ? 'Recusar Conferência' : 'Excluir Intenção de Pagamento'}
+                </h3>
+              </div>
             </div>
 
             <p className="text-xs text-zinc-300 leading-relaxed">
-              Explique o motivo da recusa (ex: comprovante ilegível, valor não caiu na conta, foto do odômetro cortada, etc). Esta mensagem aparecerá para o motorista para que ele possa corrigir e reenviar.
+              {modalAction === 'recusar' 
+                ? 'Explique o motivo da recusa (ex: comprovante ilegível, foto cortada). O motorista fará a correção nesta mesma intenção de pagamento.'
+                : 'Esta ação irá apagar esta intenção de pagamento e devolver para "pendente", puxando o valor atualizado do contrato. Explique o motivo para o motorista.'}
             </p>
 
-            <form onSubmit={handleRejectSubmit} className="space-y-4">
+            <form onSubmit={handleActionSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-zinc-200 mb-1.5">
-                  Motivo da Recusa (Obrigatório) <span className="text-red-500">*</span>:
+                  Motivo (Obrigatório) <span className="text-red-500">*</span>:
                 </label>
                 <textarea
-                  value={rejectReason}
-                  onChange={(e) => setRejectReason(e.target.value)}
-                  placeholder="Ex: O comprovante enviado está ilegível ou o valor de R$ 650,00 não foi identificado no extrato bancário. Por favor, reenvie o comprovante correto."
+                  value={actionReason}
+                  onChange={(e) => setActionReason(e.target.value)}
+                  placeholder={modalAction === 'recusar' ? "Ex: O comprovante está ilegível..." : "Ex: Enviado por engano ou valor estava incorreto..."}
                   rows={4}
                   required
                   className="w-full bg-zinc-950 border border-zinc-700 focus:border-red-500 focus:ring-1 focus:ring-red-500 rounded-xl p-3 text-xs text-white placeholder-zinc-500 focus:outline-none"
@@ -541,21 +548,21 @@ export default function ConferenciaPage() {
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
                 <button
                   type="button"
-                  onClick={() => setIsRejectModalOpen(false)}
+                  onClick={() => setModalAction(null)}
                   className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  disabled={!rejectReason.trim()}
+                  disabled={!actionReason.trim()}
                   className={`px-5 py-2.5 rounded-xl text-xs font-bold transition ${
-                    rejectReason.trim()
-                      ? "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30"
+                    actionReason.trim()
+                      ? modalAction === 'recusar' ? "bg-red-600 hover:bg-red-500 text-white" : "bg-orange-600 hover:bg-orange-500 text-white"
                       : "bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700"
                   }`}
                 >
-                  Confirmar Recusa
+                  {modalAction === 'recusar' ? 'Confirmar Recusa' : 'Confirmar Exclusão'}
                 </button>
               </div>
             </form>
