@@ -222,7 +222,31 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
           }
           return p;
         });
-        setPayments(mappedPayments);
+
+        // Dedup: Remove duplicatas para o mesmo veículo na mesma data de vencimento
+        // Mantém sempre o status mais avançado (confirmado > pendente_conferencia > pendente_envio)
+        const uniquePayments = new Map<string, any>();
+        mappedPayments.forEach((p: any) => {
+          const key = `${p.vehicle_id}-${p.data_vencimento}`;
+          const existing = uniquePayments.get(key);
+          if (!existing) {
+            uniquePayments.set(key, p);
+          } else {
+            const scores: Record<string, number> = { confirmado: 4, pendente_conferencia: 3, recusado: 2, atrasado: 1, pendente_envio: 0 };
+            const scoreA = scores[p.status] || 0;
+            const scoreB = scores[existing.status] || 0;
+            // Fica com a intenção mais avançada OU a mais recente se o status for igual
+            if (scoreA > scoreB || (scoreA === scoreB && new Date(p.updated_at).getTime() > new Date(existing.updated_at).getTime())) {
+              uniquePayments.set(key, p);
+              // Como estamos deletando o perdedor, vamos deletar do Supabase para limpar
+              supabase.from("payments").delete().eq("id", existing.id).then();
+            } else {
+              supabase.from("payments").delete().eq("id", p.id).then();
+            }
+          }
+        });
+        
+        setPayments(Array.from(uniquePayments.values()));
         
         setInspections(cloudInspections || []);
         setMaintenances(cloudMaintenances || []);
@@ -952,6 +976,47 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
       `A intenção de pagamento foi recusada pelo locador. Motivo: ${reason}`,
       "/motorista"
     );
+  };
+
+  // Excluir Intenção (Reseta para pendente_envio, atualiza valor e limpa dados)
+  const resetPaymentIntention = async (paymentId: string, reason?: string) => {
+    const payment = payments.find((p) => p.id === paymentId);
+    if (!payment) return;
+
+    const contract = contracts.find((c) => c.id === payment.contract_id);
+    if (!contract) return;
+
+    const updatedPayment = {
+      ...payment,
+      status: "pendente_envio" as const,
+      valor: contract.valor_aluguel,
+      comprovante_url: null as any,
+      motivo_recusa: null as any,
+      observacao_admin: reason ? `Excluído: ${reason}` : null,
+      updated_at: new Date().toISOString(),
+    };
+
+    setPayments((prev) =>
+      prev.map((p) => (p.id === paymentId ? updatedPayment : p))
+    );
+
+    setInspections((prev) => prev.filter((i) => i.payment_id !== paymentId));
+
+    try {
+      const supabase = createClient();
+      await Promise.allSettled([
+        supabase.from("payments").update({
+          status: "pendente_envio",
+          valor: contract.valor_aluguel,
+          comprovante_url: null,
+          observacao_admin: reason ? `Excluído: ${reason}` : null,
+          updated_at: new Date().toISOString(),
+        }).eq("id", paymentId),
+        supabase.from("inspections").delete().eq("payment_id", paymentId),
+      ]);
+    } catch (err) {
+      console.warn("Aviso ao excluir intenção no Supabase:", err);
+    }
   };
 
   // Manutenções

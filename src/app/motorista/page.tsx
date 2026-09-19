@@ -29,6 +29,7 @@ export default function MotoristaPage() {
     payments,
     activeAlerts,
     refreshDataFromCloud,
+    resetPaymentIntention,
   } = useSevenDrive();
 
   // Sincronização automática em segundo plano para refletir aprovação/recusa em tempo real
