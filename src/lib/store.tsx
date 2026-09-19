@@ -360,15 +360,15 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
         if (payments.length) {
           // Prepara para o Supabase mapeando o status "recusado" (que não existe na constraint do banco) para "pendente_envio"
           const cloudSafePayments = payments.map(p => {
-            if (p.status === "recusado") {
-              const { motivo_recusa, ...rest } = p;
+            const { motivo_recusa, ...rest } = p;
+            if (rest.status === "recusado") {
               return {
                 ...rest,
                 status: "pendente_envio",
                 observacao_admin: `RECUSADO: ${motivo_recusa || ""}`
               };
             }
-            return p;
+            return rest;
           });
           await supabase.from("payments").upsert(cloudSafePayments);
         }
@@ -863,7 +863,6 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
         supabase.from("payments").update({
           status: "pendente_conferencia",
           comprovante_url: data.receiptUrl,
-          motivo_recusa: null,
           data_pagamento: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }).eq("id", data.paymentId),
