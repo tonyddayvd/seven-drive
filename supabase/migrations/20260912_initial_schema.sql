@@ -69,9 +69,10 @@ CREATE TABLE IF NOT EXISTS public.payments (
     valor NUMERIC(10, 2) NOT NULL,
     data_vencimento DATE NOT NULL,
     data_pagamento TIMESTAMPTZ,
-    status TEXT NOT NULL CHECK (status IN ('pendente_envio', 'pendente_conferencia', 'confirmado', 'atrasado')) DEFAULT 'pendente_envio',
+    status TEXT NOT NULL CHECK (status IN ('pendente_envio', 'pendente_conferencia', 'confirmado', 'atrasado', 'recusado')) DEFAULT 'pendente_envio',
     comprovante_url TEXT,
     observacao_admin TEXT,
+    motivo_recusa TEXT,
     semana_ano TEXT, -- Formato 'YYYY-WW' para linha do tempo
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
