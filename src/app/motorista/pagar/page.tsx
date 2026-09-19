@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSevenDrive } from "@/lib/store";
 import { PixQrCode } from "@/components/pix-display/PixQrCode";
 import { InspectionStep, InspectionPhotos } from "@/components/inspection-camera/InspectionStep";
@@ -17,11 +17,15 @@ import {
   AlertCircle,
   FileText,
   Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { compressImage } from "@/lib/image-compressor";
 
-export default function PagarWizardPage() {
+function PagarWizardContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const paramPaymentId = searchParams.get("id");
+
   const {
     currentUser,
     profiles,
@@ -39,16 +43,24 @@ export default function PagarWizardPage() {
   const activeContract = contracts.find((c) => c.driver_id === activeDriver.id && c.status === "ativo") || contracts[0];
   const vehicle = vehicles.find((v) => v.id === activeContract?.vehicle_id) || vehicles[0];
 
-  // Busca o pagamento em aberto do motorista ordenado cronologicamente (o mais próximo a vencer primeiro)
+  // Busca os pagamentos do motorista
   const driverPayments = payments.filter(
     (p) => (activeContract && p.contract_id === activeContract.id) || p.driver_id === activeDriver.id || p.vehicle_id === vehicle?.id
   );
 
-  const openPayments = driverPayments
-    .filter((p) => p.status === "pendente_envio" || p.status === "pendente_conferencia" || p.status === "atrasado")
-    .sort((a, b) => new Date(a.data_vencimento).getTime() - new Date(b.data_vencimento).getTime());
+  // Seleciona o pagamento específico da URL, ou o recusado prioritariamente, ou o mais próximo a vencer
+  const paramPayment = paramPaymentId ? payments.find((p) => p.id === paramPaymentId) : null;
+  const rejectedPayment = driverPayments.find((p) => p.status === "recusado");
 
-  const currentPayment = openPayments[0] || driverPayments.sort((a, b) => new Date(b.data_vencimento).getTime() - new Date(a.data_vencimento).getTime())[0];
+  const openPayments = driverPayments
+    .filter((p) => p.status === "recusado" || p.status === "pendente_envio" || p.status === "atrasado" || p.status === "pendente_conferencia")
+    .sort((a, b) => {
+      if (a.status === "recusado" && b.status !== "recusado") return -1;
+      if (b.status === "recusado" && a.status !== "recusado") return 1;
+      return new Date(a.data_vencimento).getTime() - new Date(b.data_vencimento).getTime();
+    });
+
+  const currentPayment = paramPayment || rejectedPayment || openPayments[0] || driverPayments[0];
 
   // Estados do Wizard
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
@@ -57,8 +69,9 @@ export default function PagarWizardPage() {
   const [compressingReceipt, setCompressingReceipt] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Vistoria
-  const [currentKM, setCurrentKM] = useState<number>(vehicle ? vehicle.km_atual : 0);
+  // Vistoria: o KM inicial deve ser vazio ou 0 para exigir digitação explícita do motorista
+  const previousKM = vehicle ? vehicle.km_atual : 0;
+  const [currentKM, setCurrentKM] = useState<number>(0);
   const [photos, setPhotos] = useState<InspectionPhotos>({
     frente: "",
     lateralEsq: "",
@@ -85,9 +98,10 @@ export default function PagarWizardPage() {
   // Validação da Etapa 2: Comprovante
   const isReceiptValid = Boolean(receiptUrl);
 
-  // Validação da Etapa 3: 6 fotos + KM preenchido
+  // Validação da Etapa 3: 6 fotos + KM estritamente superior ao anterior
   const filledPhotosCount = Object.values(photos).filter(Boolean).length;
-  const isInspectionValid = filledPhotosCount === 6 && currentKM > 0;
+  const isKMValid = previousKM > 0 ? currentKM > previousKM : currentKM > 0;
+  const isInspectionValid = filledPhotosCount === 6 && isKMValid;
 
   const handleReceiptFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -137,7 +151,7 @@ export default function PagarWizardPage() {
           Pagamento & Vistoria Enviados!
         </h2>
         <p className="text-sm text-zinc-300 leading-relaxed">
-          Seu comprovante e as 6 fotos da vistoria digital com o KM ({currentKM} km) foram enviados com sucesso para a <strong>Fila de Conferência do Locador</strong>.
+          Seu comprovante e as 6 fotos da vistoria digital com o novo KM ({currentKM.toLocaleString("pt-BR")} km) foram enviados com sucesso para a <strong>Fila de Conferência do Locador</strong>.
         </p>
         <div className="p-4 rounded-xl bg-blue-950/40 border border-blue-800 text-xs text-blue-300">
           O status do seu aluguel mudou para <strong>Pendente de Conferência</strong>. Assim que o locador confirmar, seu saldo e histórico serão atualizados.
@@ -156,10 +170,31 @@ export default function PagarWizardPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
+      {/* Alerta Chamativo se o Pagamento Estiver Recusado */}
+      {currentPayment.status === "recusado" && (
+        <div className="p-4 sm:p-5 bg-red-950/80 border-2 border-red-500 rounded-3xl text-xs space-y-2.5 text-red-200 shadow-xl shadow-red-950/50 animate-fade-in">
+          <div className="flex items-center gap-2 text-red-400 font-black text-sm">
+            <AlertTriangle className="w-5 h-5 shrink-0" />
+            <span>Atenção: Você está corrigindo um envio que foi recusado pelo locador</span>
+          </div>
+          <div className="bg-black/60 p-3.5 rounded-2xl border border-red-900/60">
+            <span className="text-red-400 font-bold block mb-1 uppercase text-[10px] tracking-wide">
+              Motivo da Recusa Informado pelo Locador:
+            </span>
+            <p className="text-zinc-200 italic font-medium leading-relaxed">
+              &ldquo;{currentPayment.motivo_recusa || currentPayment.observacao_admin || "Comprovante ilegível ou vistoria necessita de reenvio."}&rdquo;
+            </p>
+          </div>
+          <p className="text-zinc-300">
+            Substitua o comprovante de pagamento ou as fotos conforme solicitado acima e conclua o envio para nova análise.
+          </p>
+        </div>
+      )}
+
       {/* Cabeçalho do Wizard */}
       <div className="text-center space-y-1">
         <h1 className="text-2xl font-black text-white tracking-tight">
-          Pagamento do Aluguel & Vistoria Obrigatória
+          {currentPayment.status === "recusado" ? "Correção & Reenvio de Pagamento" : "Pagamento do Aluguel & Vistoria Obrigatória"}
         </h1>
         <p className="text-xs text-zinc-400">
           Processo sequencial em 3 etapas com dupla checagem de evidências.
@@ -344,7 +379,7 @@ export default function PagarWizardPage() {
           </div>
         )}
 
-        {/* ETAPA 3: VISTORIA DIGITAL OBRIGATÓRIA (6 FOTOS + KM) */}
+        {/* ETAPA 3: VISTORIA DIGITAL OBRIGATÓRIA (6 FOTOS + KM SUPERIOR) */}
         {currentStep === 3 && (
           <div className="space-y-6">
             <div>
@@ -364,14 +399,21 @@ export default function PagarWizardPage() {
               onPhotosChange={setPhotos}
               observacoes={observacoes}
               onObservacoesChange={setObservacoes}
+              previousKM={previousKM}
             />
 
-            {/* Alerta de Validação */}
+            {/* Alerta de Validação com detalhes claros */}
             {(!isInspectionValid || !isReceiptValid) && (
               <div className="p-3 bg-amber-950/40 border border-amber-500/60 rounded-xl text-amber-300 text-xs flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>
-                  Para concluir o envio, certifique-se de que o comprovante bancário foi anexado, todas as 6 fotos foram tiradas e o KM atual foi informado.
+                  {!isReceiptValid
+                    ? "Comprovante bancário pendente na Etapa 2."
+                    : filledPhotosCount < 6
+                    ? `Complete todas as 6 fotos da vistoria (atualmente ${filledPhotosCount} de 6).`
+                    : !isKMValid
+                    ? `A quilometragem informada (${currentKM} km) deve ser maior que o último registro do veículo (${previousKM.toLocaleString("pt-BR")} km).`
+                    : "Preencha todos os campos obrigatórios para enviar."}
                 </span>
               </div>
             )}
@@ -414,5 +456,20 @@ export default function PagarWizardPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function PagarWizardPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="max-w-xl mx-auto p-12 text-center text-zinc-400 flex items-center justify-center gap-2">
+          <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
+          <span className="text-xs">Carregando dados de pagamento...</span>
+        </div>
+      }
+    >
+      <PagarWizardContent />
+    </Suspense>
   );
 }

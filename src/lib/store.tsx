@@ -448,23 +448,34 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     setActiveAlerts(alerts);
   }, [vehicles, maintenanceRules, maintenances]);
 
-  // Disparo de Notificação no Navegador (Compatível e seguro para Mobile e Desktop)
-  const triggerBrowserNotification = (title: string, body: string) => {
+  // Disparo de Notificação no Navegador (Compatível e seguro para Mobile e Desktop com ação de clique)
+  const triggerBrowserNotification = (title: string, body: string, targetUrl: string = "/motorista") => {
     try {
       if (typeof window !== "undefined" && "Notification" in window) {
-        if (Notification.permission === "granted") {
+        const createAndBind = () => {
           try {
-            new Notification(title, { body });
+            const notif = new Notification(title, {
+              body,
+              icon: "/favicon.ico",
+            });
+            notif.onclick = () => {
+              try {
+                window.focus();
+                window.location.href = targetUrl;
+              } catch {}
+            };
           } catch {
-            // Em navegadores móveis, new Notification pode requerer ServiceWorkerRegistration
+            // Fallback para navegadores móveis que não suportam construtor direto
           }
+        };
+
+        if (Notification.permission === "granted") {
+          createAndBind();
         } else if (Notification.permission !== "denied") {
           Notification.requestPermission()
             .then((permission) => {
               if (permission === "granted") {
-                try {
-                  new Notification(title, { body });
-                } catch {}
+                createAndBind();
               }
             })
             .catch(() => {});
@@ -762,6 +773,7 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
               ...p,
               status: "pendente_conferencia",
               comprovante_url: data.receiptUrl,
+              motivo_recusa: null,
               data_pagamento: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             }
@@ -777,6 +789,7 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
         supabase.from("payments").update({
           status: "pendente_conferencia",
           comprovante_url: data.receiptUrl,
+          motivo_recusa: null,
           data_pagamento: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }).eq("id", data.paymentId),
@@ -787,7 +800,8 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
 
     triggerBrowserNotification(
       "Seven Drive - Novo Pagamento Enviado",
-      `O motorista enviou comprovante e vistoria (${data.kmRegistrado} km) para conferência.`
+      `O motorista enviou comprovante e vistoria (${data.kmRegistrado} km) para conferência.`,
+      "/admin/conferencia"
     );
   };
 
@@ -884,7 +898,8 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
 
     triggerBrowserNotification(
       "Seven Drive - Pagamento Recusado",
-      `A intenção de pagamento foi recusada pelo locador. Motivo: ${reason}`
+      `A intenção de pagamento foi recusada pelo locador. Motivo: ${reason}`,
+      "/motorista"
     );
   };
 

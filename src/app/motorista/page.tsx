@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSevenDrive } from "@/lib/store";
 import { formatCurrency, formatKM, formatDate, formatPlate, isPaymentLate } from "@/lib/utils";
@@ -16,6 +16,8 @@ import {
   ShieldCheck,
   FileText,
   User,
+  AlertOctagon,
+  RefreshCw,
 } from "lucide-react";
 
 export default function MotoristaPage() {
@@ -26,7 +28,16 @@ export default function MotoristaPage() {
     contracts,
     payments,
     activeAlerts,
+    refreshDataFromCloud,
   } = useSevenDrive();
+
+  // Sincronização automática em segundo plano para refletir aprovação/recusa em tempo real
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refreshDataFromCloud().catch(() => {});
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const driversList = profiles.filter((p) => p.role === "driver");
 
@@ -44,18 +55,24 @@ export default function MotoristaPage() {
 
   const vehicle = vehicles.find((v) => v.id === contract?.vehicle_id) || vehicles[0];
 
-  // Encontra o próximo pagamento em aberto / vencimento iminente deste motorista
+  // Encontra os pagamentos deste motorista
   const driverPayments = payments.filter(
     (p) => (contract && p.contract_id === contract.id) || p.driver_id === activeDriver.id
   );
 
-  // 1. Prioriza pagamentos em aberto (pendente_envio, atrasado, pendente_conferencia, recusado) em ordem cronológica
-  const openPayments = driverPayments
-    .filter((p) => p.status === "pendente_envio" || p.status === "atrasado" || p.status === "pendente_conferencia" || p.status === "recusado")
-    .sort((a, b) => new Date(a.data_vencimento).getTime() - new Date(b.data_vencimento).getTime());
+  // PRIORIDADE 1: Se houver qualquer pagamento recusado pelo locador, ele é o centro das atenções!
+  const rejectedPayment = driverPayments.find((p) => p.status === "recusado");
 
-  // 2. Se não houver pendências em aberto, pega o mais recente já confirmado
-  const currentPayment = openPayments[0] || driverPayments.sort((a, b) => new Date(b.data_vencimento).getTime() - new Date(a.data_vencimento).getTime())[0];
+  // Pagamentos em aberto ordenados
+  const openPayments = driverPayments
+    .filter((p) => p.status === "recusado" || p.status === "pendente_envio" || p.status === "atrasado" || p.status === "pendente_conferencia")
+    .sort((a, b) => {
+      if (a.status === "recusado" && b.status !== "recusado") return -1;
+      if (b.status === "recusado" && a.status !== "recusado") return 1;
+      return new Date(a.data_vencimento).getTime() - new Date(b.data_vencimento).getTime();
+    });
+
+  const currentPayment = rejectedPayment || openPayments[0] || driverPayments.sort((a, b) => new Date(b.data_vencimento).getTime() - new Date(a.data_vencimento).getTime())[0];
 
   const vehicleAlerts = activeAlerts.filter((a) => a.vehicleId === vehicle?.id);
 
@@ -89,6 +106,48 @@ export default function MotoristaPage() {
               </option>
             ))}
           </select>
+        </div>
+      )}
+
+      {/* Alerta de Recusa Prioritário se houver pagamento recusado */}
+      {rejectedPayment && (
+        <div className="p-5 rounded-3xl bg-red-950/80 border-2 border-red-500 text-white shadow-xl shadow-red-950/50 space-y-3 animate-fade-in">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-2xl bg-red-500/20 text-red-400 flex items-center justify-center shrink-0">
+                <AlertOctagon className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-sm font-black text-white uppercase tracking-wider">
+                  Atenção: Seu Envio Foi Recusado pelo Locador
+                </h2>
+                <span className="text-xs text-red-300">
+                  Vencimento: {formatDate(rejectedPayment.data_vencimento)} • Valor: {formatCurrency(rejectedPayment.valor)}
+                </span>
+              </div>
+            </div>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded bg-red-500 text-white animate-pulse">
+              Ação Necessária
+            </span>
+          </div>
+
+          <div className="bg-black/60 p-3.5 rounded-2xl border border-red-900/60 text-xs space-y-1">
+            <span className="text-red-400 font-bold block text-[11px] uppercase tracking-wide">
+              Motivo apontado pelo Locador:
+            </span>
+            <p className="text-zinc-200 italic font-medium leading-relaxed">
+              &ldquo;{rejectedPayment.motivo_recusa || rejectedPayment.observacao_admin || "Comprovante ou vistoria pendente de regularização."}&rdquo;
+            </p>
+          </div>
+
+          <Link
+            href={`/motorista/pagar?id=${rejectedPayment.id}`}
+            className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs shadow-lg shadow-red-600/40 transition"
+          >
+            <CreditCard className="w-4 h-4" />
+            <span>Corrigir Comprovante / Fotos e Reenviar Agora</span>
+            <ArrowRight className="w-4 h-4" />
+          </Link>
         </div>
       )}
 
@@ -234,7 +293,7 @@ export default function MotoristaPage() {
 
             {(currentPayment.status === "pendente_envio" || currentPayment.status === "recusado") && (
               <Link
-                href="/motorista/pagar"
+                href={`/motorista/pagar?id=${currentPayment.id}`}
                 className="flex items-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition"
               >
                 <CreditCard className="w-4 h-4" />

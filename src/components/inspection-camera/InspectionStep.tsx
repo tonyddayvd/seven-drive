@@ -20,6 +20,7 @@ interface InspectionStepProps {
   observacoes: string;
   onObservacoesChange: (obs: string) => void;
   allowGallery?: boolean;
+  previousKM?: number;
 }
 
 export function InspectionStep({
@@ -30,6 +31,7 @@ export function InspectionStep({
   observacoes,
   onObservacoesChange,
   allowGallery = false,
+  previousKM,
 }: InspectionStepProps) {
   const [compressingSlot, setCompressingSlot] = useState<string | null>(null);
 
@@ -43,7 +45,8 @@ export function InspectionStep({
   ];
 
   const filledCount = Object.values(photos).filter(Boolean).length;
-  const isComplete = filledCount === 6 && currentKM > 0;
+  const isKMValid = previousKM !== undefined && previousKM > 0 ? currentKM > previousKM : currentKM > 0;
+  const isComplete = filledCount === 6 && isKMValid;
 
   const handleFileUpload = async (key: keyof InspectionPhotos, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -76,26 +79,63 @@ export function InspectionStep({
         </div>
       </div>
 
-      {/* Campo de KM Atual com Destaque */}
+      {/* Campo de KM Atual com Destaque e Validação Superior */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-        <label className="block text-sm font-bold text-white mb-1">
-          Quilometragem Atual (KM do Odômetro) <span className="text-red-500">*</span>
-        </label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="block text-sm font-bold text-white">
+            Quilometragem Atual (KM do Odômetro) <span className="text-red-500">*</span>
+          </label>
+          {previousKM !== undefined && previousKM > 0 && (
+            <span className="text-xs text-zinc-400 font-mono">
+              KM anterior: <strong className="text-zinc-200">{previousKM.toLocaleString("pt-BR")} km</strong>
+            </span>
+          )}
+        </div>
         <p className="text-xs text-zinc-400 mb-3">
-          Digite exatamente o valor exibido no painel do carro neste momento:
+          {previousKM !== undefined && previousKM > 0 ? (
+            <span>
+              Digite a quilometragem exibida no painel. O valor <strong>deve ser maior</strong> que o último registro (<strong>{previousKM.toLocaleString("pt-BR")} km</strong>).
+            </span>
+          ) : (
+            <span>Digite exatamente o valor exibido no painel do carro neste momento:</span>
+          )}
         </p>
         <div className="relative">
           <input
             type="number"
             value={currentKM || ""}
             onChange={(e) => onKMChange(Number(e.target.value))}
-            placeholder="Ex: 38450"
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-lg font-mono font-bold text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder={previousKM ? `Maior que ${previousKM}` : "Ex: 38450"}
+            className={`w-full bg-zinc-800 border rounded-lg px-4 py-3 text-lg font-mono font-bold text-white placeholder-zinc-500 focus:outline-none focus:ring-2 ${
+              previousKM !== undefined && previousKM > 0 && currentKM > 0 && currentKM <= previousKM
+                ? "border-red-500 focus:ring-red-500"
+                : "border-zinc-700 focus:ring-blue-500"
+            }`}
           />
           <span className="absolute right-4 top-3.5 text-zinc-400 font-bold text-sm">
             KM
           </span>
         </div>
+
+        {/* Mensagem de Erro de Validação de KM */}
+        {previousKM !== undefined && previousKM > 0 && currentKM > 0 && currentKM <= previousKM && (
+          <div className="mt-2.5 p-3 rounded-lg bg-red-950/60 border border-red-500 text-xs text-red-300 flex items-start gap-2 animate-shake">
+            <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+            <span>
+              <strong>Quilometragem Inválida:</strong> O KM informado (<strong>{currentKM.toLocaleString("pt-BR")} km</strong>) não pode ser menor ou igual ao cadastrado anteriormente (<strong>{previousKM.toLocaleString("pt-BR")} km</strong>). O carro rodou durante a semana; informe a quilometragem atual do odômetro.
+            </span>
+          </div>
+        )}
+
+        {/* Feedback de Sucesso no KM */}
+        {previousKM !== undefined && previousKM > 0 && currentKM > previousKM && (
+          <div className="mt-2 text-xs text-emerald-400 font-semibold flex items-center gap-1.5">
+            <Check className="w-4 h-4 text-emerald-400" />
+            <span>
+              Odômetro válido! (+{(currentKM - previousKM).toLocaleString("pt-BR")} km rodados nesta semana).
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Grid de Fotos de Vistoria (6 fotos) */}

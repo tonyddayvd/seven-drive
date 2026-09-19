@@ -91,6 +91,14 @@ export default function PagamentosPage() {
   const handleSaveAdminInspectionAndConfirm = async () => {
     if (!selectedPaymentForInspection) return;
 
+    const currentVeh = vehicles.find((v) => v.id === selectedPaymentForInspection.vehicle_id);
+    if (currentVeh?.km_atual && adminInspectionKM <= currentVeh.km_atual) {
+      alert(
+        `O odômetro informado (${adminInspectionKM} km) deve ser maior que a quilometragem anterior cadastrada (${currentVeh.km_atual} km).`
+      );
+      return;
+    }
+
     // Submete a vistoria e comprovante
     await submitPaymentAndInspection({
       paymentId: selectedPaymentForInspection.id,
@@ -582,6 +590,7 @@ export default function PagamentosPage() {
                 observacoes={adminObs}
                 onObservacoesChange={setAdminObs}
                 allowGallery={true}
+                previousKM={vehicles.find((v) => v.id === selectedPaymentForInspection.vehicle_id)?.km_atual}
               />
             </div>
 
