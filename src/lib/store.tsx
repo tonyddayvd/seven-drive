@@ -464,14 +464,14 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
 
   // Garante automaticamente que contratos ativos sempre tenham as próximas semanas geradas sem intervenção manual
   useEffect(() => {
-    if (contracts.length > 0) {
+    if (isCloudLoaded && contracts.length > 0 && payments.length > 0) {
       contracts.forEach((c) => {
         if (c.status === "ativo") {
           ensureFuturePaymentsForContract(c.id, 6);
         }
       });
     }
-  }, [contracts.length]);
+  }, [isCloudLoaded, contracts.length, payments.length]);
 
   // Cálculo Dinâmico de Alertas Duplos de Manutenção por KM (Apenas veículos existentes!)
   useEffect(() => {
@@ -571,10 +571,19 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     setVehicles((prev) => [newVeh, ...prev]);
   };
 
-  const updateVehicle = (id: string, updates: Partial<Vehicle>) => {
+  const updateVehicle = async (id: string, updates: Partial<Vehicle>) => {
     setVehicles((prev) =>
       prev.map((v) => (v.id === id ? { ...v, ...updates, updated_at: new Date().toISOString() } : v))
     );
+    try {
+      const supabase = createClient();
+      await supabase.from("vehicles").update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      }).eq("id", id);
+    } catch (err) {
+      console.warn("Aviso ao atualizar veículo no Supabase:", err);
+    }
   };
 
   const deleteVehicle = async (id: string) => {
@@ -704,6 +713,7 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
 
   // Garante que existam parcelas geradas continuamente para as próximas semanas
   const ensureFuturePaymentsForContract = (contractId: string, minWeeksAhead: number = 6) => {
+    if (!isCloudLoaded) return;
     const contract = contracts.find((c) => c.id === contractId);
     if (!contract || contract.status !== "ativo") return;
 
@@ -729,6 +739,7 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     }
 
     const today = new Date();
+    const todayStr = today.toISOString().split("T")[0];
     const limitFutureDate = new Date(today);
     limitFutureDate.setDate(limitFutureDate.getDate() + (minWeeksAhead * 7));
 
@@ -739,6 +750,9 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     while (curDate < limitFutureDate) {
       curDate.setDate(curDate.getDate() + 7);
       const dueDateStr = curDate.toISOString().split("T")[0];
+
+      // Nunca gera parcela futura retroativa a data de hoje (evita recriar parcelas antigas que já foram pagas/baixadas)
+      if (dueDateStr < todayStr) continue;
 
       const alreadyExists = payments.some(
         (p) => p.contract_id === contract.id && p.data_vencimento === dueDateStr
@@ -767,7 +781,12 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     }
 
     if (newPayments.length > 0) {
-      setPayments((prev) => [...prev, ...newPayments]);
+      setPayments((prev) => {
+        const existingKeys = new Set(prev.map((p) => `${p.contract_id}-${p.data_vencimento}`));
+        const filteredNew = newPayments.filter((p) => !existingKeys.has(`${p.contract_id}-${p.data_vencimento}`));
+        if (filteredNew.length === 0) return prev;
+        return [...prev, ...filteredNew];
+      });
     }
   };
 
@@ -777,7 +796,7 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
   };
 
   // Pagamentos
-  const addPayment = (paymentData: Omit<Payment, "id" | "created_at" | "updated_at">) => {
+  const addPayment = async (paymentData: Omit<Payment, "id" | "created_at" | "updated_at">) => {
     const newPay: Payment = {
       ...paymentData,
       id: `pay-${Date.now()}`,
@@ -785,12 +804,29 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
       updated_at: new Date().toISOString(),
     };
     setPayments((prev) => [newPay, ...prev]);
+    try {
+      const supabase = createClient();
+      const { motivo_recusa, ...cleanPay } = newPay as any;
+      await supabase.from("payments").insert([cleanPay]);
+    } catch (err) {
+      console.warn("Aviso ao adicionar pagamento no Supabase:", err);
+    }
   };
 
-  const updatePayment = (id: string, updates: Partial<Payment>) => {
+  const updatePayment = async (id: string, updates: Partial<Payment>) => {
     setPayments((prev) =>
       prev.map((p) => (p.id === id ? { ...p, ...updates, updated_at: new Date().toISOString() } : p))
     );
+    try {
+      const supabase = createClient();
+      const { motivo_recusa, ...cleanUpdates } = updates as any;
+      await supabase.from("payments").update({
+        ...cleanUpdates,
+        updated_at: new Date().toISOString(),
+      }).eq("id", id);
+    } catch (err) {
+      console.warn("Aviso ao atualizar pagamento no Supabase:", err);
+    }
   };
 
   const deletePayment = async (id: string) => {
@@ -886,6 +922,7 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     const updatedPayment = {
       ...payment,
       status: "confirmado" as const,
+      data_pagamento: new Date().toISOString(),
       observacao_admin: observation || "Confirmado e baixado pelo Locador.",
       updated_at: new Date().toISOString(),
     };
@@ -912,6 +949,7 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
       await Promise.allSettled([
         supabase.from("payments").update({
           status: "confirmado",
+          data_pagamento: new Date().toISOString(),
           observacao_admin: observation || "Confirmado e baixado pelo Locador.",
           updated_at: new Date().toISOString(),
         }).eq("id", paymentId),
@@ -919,6 +957,12 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
           ? supabase.from("inspections").update({
               status_conferencia: "aprovada",
             }).eq("id", inspection.id)
+          : Promise.resolve(),
+        inspection && inspection.km_registrado > 0
+          ? supabase.from("vehicles").update({
+              km_atual: inspection.km_registrado,
+              updated_at: new Date().toISOString(),
+            }).eq("id", payment.vehicle_id)
           : Promise.resolve(),
       ]);
     } catch (err) {
