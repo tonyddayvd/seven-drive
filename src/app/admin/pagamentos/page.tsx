@@ -189,16 +189,18 @@ export default function PagamentosPage() {
     setIsModalOpen(false);
   };
 
-  const filteredPayments = payments.filter((p) => {
-    const matchesStatus = filterStatus === "all" || p.status === filterStatus;
-    const driver = profiles.find((d) => d.id === p.driver_id);
-    const vehicle = vehicles.find((v) => v.id === p.vehicle_id);
-    const matchesSearch =
-      (driver?.full_name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (vehicle?.placa || "").toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredPayments = payments
+    .filter((p) => {
+      const matchesStatus = filterStatus === "all" || p.status === filterStatus;
+      const driver = profiles.find((d) => d.id === p.driver_id);
+      const vehicle = vehicles.find((v) => v.id === p.vehicle_id);
+      const matchesSearch =
+        (driver?.full_name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (vehicle?.placa || "").toLowerCase().includes(searchTerm.toLowerCase());
 
-    return matchesStatus && matchesSearch;
-  });
+      return matchesStatus && matchesSearch;
+    })
+    .sort((a, b) => new Date(b.data_vencimento).getTime() - new Date(a.data_vencimento).getTime());
 
   return (
     <div className="space-y-6">

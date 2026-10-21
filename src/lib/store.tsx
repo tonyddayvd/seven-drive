@@ -108,6 +108,7 @@ interface SevenDriveContextType {
   addMaintenanceRule: (rule: Omit<MaintenanceRule, "id" | "created_at">) => void;
   updateMaintenanceRule: (id: string, updates: Partial<MaintenanceRule>) => void;
   addMaintenance: (maint: Omit<Maintenance, "id" | "created_at">) => void;
+  updateMaintenance: (id: string, updates: Partial<Maintenance>) => Promise<void>;
   deleteMaintenance: (id: string) => void;
 
   // Multas & Despesas
@@ -213,18 +214,18 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
 
         // Traduz o status "recusado" que foi salvo como "pendente_envio" no banco devido à restrição do Supabase
         const mappedPayments = (cloudPayments || []).map((p: any) => {
-          if (p.status === "pendente_envio" && p.observacao_admin?.startsWith("RECUSADO:")) {
+          if (p.status === "pendente_envio" && (p.observacao_admin?.startsWith("RECUSADO:") || p.observacao_admin?.toLowerCase().includes("recusad"))) {
             return {
               ...p,
               status: "recusado",
-              motivo_recusa: p.observacao_admin.replace("RECUSADO: ", ""),
+              motivo_recusa: p.observacao_admin.replace(/^RECUSADO:\s*/i, ""),
             };
           }
           return p;
         });
 
         // Dedup: Remove duplicatas para o mesmo veículo na mesma data de vencimento
-        // Mantém sempre o status mais avançado (confirmado > pendente_conferencia > pendente_envio)
+        // Mantém sempre o status mais avançado (confirmado > pendente_conferencia > recusado > atrasado > pendente_envio)
         const uniquePayments = new Map<string, any>();
         mappedPayments.forEach((p: any) => {
           const key = `${p.vehicle_id}-${p.data_vencimento}`;
@@ -245,8 +246,13 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
             }
           }
         });
+
+        // Ordena estritamente por ordem cronológica decrescente da data de vencimento
+        const sortedPayments = Array.from(uniquePayments.values()).sort(
+          (a, b) => new Date(b.data_vencimento).getTime() - new Date(a.data_vencimento).getTime()
+        );
         
-        setPayments(Array.from(uniquePayments.values()));
+        setPayments(sortedPayments);
         
         setInspections(cloudInspections || []);
         setMaintenances(cloudMaintenances || []);
@@ -937,7 +943,13 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
         prev.map((i) => (i.id === inspection.id ? { ...i, status_conferencia: "aprovada" } : i))
       );
 
-      if (inspection.km_registrado > 0) {
+      // Trava de segurança: só atualiza odômetro se for plausível (não aceita aumentos absurdos de digitação como > 30.000km em 1 semana)
+      const currentVeh = vehicles.find((v) => v.id === payment.vehicle_id);
+      const isPlausibleKm =
+        inspection.km_registrado > 0 &&
+        (!currentVeh || inspection.km_registrado <= (currentVeh.km_atual + 25000));
+
+      if (isPlausibleKm) {
         updateVehicle(payment.vehicle_id, {
           km_atual: inspection.km_registrado,
         });
@@ -946,6 +958,12 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
 
     try {
       const supabase = createClient();
+      const currentVeh = vehicles.find((v) => v.id === payment.vehicle_id);
+      const isPlausibleKm =
+        inspection &&
+        inspection.km_registrado > 0 &&
+        (!currentVeh || inspection.km_registrado <= (currentVeh.km_atual + 25000));
+
       await Promise.allSettled([
         supabase.from("payments").update({
           status: "confirmado",
@@ -958,9 +976,9 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
               status_conferencia: "aprovada",
             }).eq("id", inspection.id)
           : Promise.resolve(),
-        inspection && inspection.km_registrado > 0
+        isPlausibleKm
           ? supabase.from("vehicles").update({
-              km_atual: inspection.km_registrado,
+              km_atual: inspection!.km_registrado,
               updated_at: new Date().toISOString(),
             }).eq("id", payment.vehicle_id)
           : Promise.resolve(),
@@ -1076,7 +1094,7 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     setMaintenanceRules((prev) => prev.map((r) => (r.id === id ? { ...r, ...updates } : r)));
   };
 
-  const addMaintenance = (maintData: Omit<Maintenance, "id" | "created_at">) => {
+  const addMaintenance = async (maintData: Omit<Maintenance, "id" | "created_at">) => {
     const newMaint: Maintenance = {
       ...maintData,
       id: `maint-${Date.now()}`,
@@ -1084,11 +1102,31 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     };
     setMaintenances((prev) => [newMaint, ...prev]);
 
+    // Só atualiza o KM do veículo se a manutenção estiver aprovada ou se o KM informado for plausível (< +30.000 do atual)
     if (maintData.km_realizado) {
       const veh = vehicles.find((v) => v.id === maintData.vehicle_id);
-      if (veh && maintData.km_realizado > veh.km_atual) {
+      if (veh && maintData.km_realizado > veh.km_atual && (maintData.km_realizado - veh.km_atual) <= 30000) {
         updateVehicle(veh.id, { km_atual: maintData.km_realizado });
       }
+    }
+
+    try {
+      const supabase = createClient();
+      await supabase.from("maintenances").insert([newMaint]);
+    } catch (err) {
+      console.warn("Aviso ao salvar manutenção no Supabase:", err);
+    }
+  };
+
+  const updateMaintenance = async (id: string, updates: Partial<Maintenance>) => {
+    setMaintenances((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, ...updates } : m))
+    );
+    try {
+      const supabase = createClient();
+      await supabase.from("maintenances").update(updates).eq("id", id);
+    } catch (err) {
+      console.warn("Aviso ao atualizar manutenção no Supabase:", err);
     }
   };
 
@@ -1232,6 +1270,7 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
         addMaintenanceRule,
         updateMaintenanceRule,
         addMaintenance,
+        updateMaintenance,
         deleteMaintenance,
         addFine,
         updateFine,

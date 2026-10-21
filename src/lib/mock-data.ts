@@ -87,6 +87,7 @@ export const initialSettings: SystemSettings = {
   tipo_chave_pix: "E-mail",
   nome_beneficiario: "Seven Drive Gestão de Frotas",
   cidade_beneficiario: "SAO PAULO",
+  whatsapp_gestor: "82988883740",
   dias_alerta_vencimento: 2,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),

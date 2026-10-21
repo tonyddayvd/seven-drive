@@ -9,7 +9,11 @@ export default function MotoristaHistoricoPage() {
   const { currentUser, profiles, payments } = useSevenDrive();
 
   const activeDriver = profiles.find((p) => p.role === "driver" && (p.id === currentUser.id || currentUser.role !== "driver")) || currentUser;
-  const driverPayments = payments.filter((p) => p.driver_id === activeDriver.id || p.driver_id === currentUser.id);
+  
+  // Inclui todos os pagamentos do motorista ativo (por id do motorista OU se houver apenas um veículo/contrato na frota)
+  const driverPayments = payments
+    .filter((p) => p.driver_id === activeDriver.id || p.driver_id === currentUser.id || !p.driver_id)
+    .sort((a, b) => new Date(b.data_vencimento).getTime() - new Date(a.data_vencimento).getTime());
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -18,7 +22,7 @@ export default function MotoristaHistoricoPage() {
           Histórico de Pagamentos & Comprovantes
         </h1>
         <p className="text-xs text-zinc-400 mt-1">
-          Acompanhe todos os aluguéis enviados, comprovantes anexados e parecer do locador.
+          Acompanhe todos os aluguéis em ordem cronológica, comprovantes anexados e parecer do locador.
         </p>
       </div>
 
@@ -40,6 +44,8 @@ export default function MotoristaHistoricoPage() {
                         ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                         : p.status === "pendente_conferencia"
                         ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                        : p.status === "recusado"
+                        ? "bg-red-500/10 text-red-400 border-red-500/20"
                         : "bg-amber-500/10 text-amber-400 border-amber-500/20"
                     }`}
                   >
@@ -47,6 +53,8 @@ export default function MotoristaHistoricoPage() {
                       ? "Confirmado & Baixado"
                       : p.status === "pendente_conferencia"
                       ? "Em Conferência"
+                      : p.status === "recusado"
+                      ? "Recusado - Reenviar"
                       : "Pendente de Envio"}
                   </span>
                 </div>

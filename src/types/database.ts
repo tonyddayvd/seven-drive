@@ -117,7 +117,10 @@ export interface Maintenance {
   valor_custo: number;
   foto_nota_url?: string | null;
   foto_odometro_url?: string | null;
-  status: 'solicitado' | 'aprovado' | 'concluido';
+  status: 'solicitado' | 'aprovado' | 'concluido' | 'recusado';
+  categoria?: 'periodica' | 'corretiva';
+  forma_pagamento_responsavel?: 'locador' | 'desconto_aluguel' | 'reembolso';
+  valor_aprovado?: number | null;
   observacoes?: string | null;
   created_at: string;
   // Joins
@@ -165,6 +168,7 @@ export interface SystemSettings {
   tipo_chave_pix: string;
   nome_beneficiario: string;
   cidade_beneficiario: string;
+  whatsapp_gestor?: string;
   dias_alerta_vencimento: number;
   created_at: string;
   updated_at: string;

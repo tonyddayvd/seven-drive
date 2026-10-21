@@ -33,6 +33,7 @@ export default function ConfiguracoesPage() {
     tipo_chave_pix: settings.tipo_chave_pix,
     nome_beneficiario: settings.nome_beneficiario,
     cidade_beneficiario: settings.cidade_beneficiario,
+    whatsapp_gestor: settings.whatsapp_gestor || "82988883740",
     dias_alerta_vencimento: settings.dias_alerta_vencimento,
   });
 
@@ -43,6 +44,7 @@ export default function ConfiguracoesPage() {
         tipo_chave_pix: settings.tipo_chave_pix || "email",
         nome_beneficiario: settings.nome_beneficiario || "",
         cidade_beneficiario: settings.cidade_beneficiario || "SAO PAULO",
+        whatsapp_gestor: settings.whatsapp_gestor || "82988883740",
         dias_alerta_vencimento: settings.dias_alerta_vencimento || 2,
       });
     }
@@ -351,6 +353,23 @@ export default function ConfiguracoesPage() {
                 className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2.5 text-white uppercase"
                 required
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-zinc-300 font-semibold mb-1">WhatsApp Oficial do Gestor (com DDD):</label>
+              <input
+                type="text"
+                value={formData.whatsapp_gestor}
+                onChange={(e) => setFormData({ ...formData, whatsapp_gestor: e.target.value })}
+                placeholder="Ex: 82988883740"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2.5 text-white font-mono"
+                required
+              />
+              <p className="text-[11px] text-zinc-500 mt-1">
+                Número utilizado para os motoristas enviarem comprovantes e notas de manutenção diretamente no WhatsApp.
+              </p>
             </div>
           </div>
 
