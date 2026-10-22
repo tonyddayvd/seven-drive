@@ -60,6 +60,7 @@ export default function AdminDashboardPage() {
   const saldoLiquidoGeral = totalReceitas - totalCustos;
 
   const pendingPayments = payments.filter((p) => p.status === "pendente_conferencia" && existingVehicleIds.has(p.vehicle_id));
+  const pendingMaintenances = maintenances.filter((m) => m.status === "solicitado" && existingVehicleIds.has(m.vehicle_id));
 
   return (
     <div className="space-y-8">
@@ -92,6 +93,19 @@ export default function AdminDashboardPage() {
             {pendingPayments.length > 0 && (
               <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
                 {pendingPayments.length}
+              </span>
+            )}
+          </Link>
+
+          <Link
+            href="/admin/manutencoes"
+            className="relative flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-lg shadow-amber-600/30 transition"
+          >
+            <Wrench className="w-4 h-4" />
+            <span>Manutenções</span>
+            {pendingMaintenances.length > 0 && (
+              <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-red-600 text-white animate-pulse">
+                {pendingMaintenances.length}
               </span>
             )}
           </Link>
@@ -155,20 +169,26 @@ export default function AdminDashboardPage() {
           </span>
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-sm">
+        <Link
+          href="/admin/manutencoes"
+          className="bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-2xl p-5 shadow-sm transition block group"
+        >
           <div className="flex items-center justify-between text-zinc-400 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Fila & Alertas de KM</span>
-            <div className="p-2 bg-amber-500/10 rounded-xl text-amber-400">
+            <span className="text-xs font-semibold uppercase tracking-wider group-hover:text-white transition">
+              Fila & Manutenções
+            </span>
+            <div className={`p-2 rounded-xl ${pendingMaintenances.length > 0 ? "bg-amber-500/20 text-amber-400 animate-pulse" : "bg-amber-500/10 text-amber-400"}`}>
               <AlertTriangle className="w-4 h-4" />
             </div>
           </div>
           <div className="text-2xl font-black text-white">
-            {pendingPayments.length} <span className="text-xs font-normal text-zinc-400">pag. /</span> {activeAlerts.length} <span className="text-xs font-normal text-zinc-400">rev.</span>
+            {pendingPayments.length} <span className="text-xs font-normal text-zinc-400">pag. /</span> {pendingMaintenances.length} <span className="text-xs font-normal text-amber-400 font-bold">manut.</span>
           </div>
-          <span className="text-xs text-amber-400 mt-1 block">
-            Ações pendentes do administrador
+          <span className="text-xs text-amber-400 group-hover:text-amber-300 mt-1 flex items-center gap-1 font-semibold">
+            {pendingMaintenances.length > 0 ? `${pendingMaintenances.length} manutenção aguarda aprovação` : `${activeAlerts.length} alertas de revisão`}
+            <ArrowUpRight className="w-3.5 h-3.5" />
           </span>
-        </div>
+        </Link>
       </div>
 
       {/* Linha do Tempo Semanal de Pagamentos */}

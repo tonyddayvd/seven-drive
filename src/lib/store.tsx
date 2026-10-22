@@ -255,10 +255,32 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
         setPayments(sortedPayments);
         
         setInspections(cloudInspections || []);
-        setMaintenances(cloudMaintenances || []);
+        
+        // Decodifica categoria e forma_pagamento das observações se existirem tags [CATEGORIA | FORMA]
+        const parsedMaintenances = (cloudMaintenances || []).map((m: any) => {
+          let cat: "periodica" | "corretiva" = "periodica";
+          let forma: "locador" | "desconto_aluguel" | "reembolso" = "desconto_aluguel";
+          if (m.observacoes?.includes("[CORRETIVA")) cat = "corretiva";
+          if (m.observacoes?.includes("DESCONTO_ALUGUEL")) forma = "desconto_aluguel";
+          if (m.observacoes?.includes("REEMBOLSO")) forma = "reembolso";
+          if (m.observacoes?.includes("LOCADOR")) forma = "locador";
+
+          return {
+            ...m,
+            categoria: cat,
+            forma_pagamento_responsavel: forma,
+          };
+        });
+        setMaintenances(parsedMaintenances);
         setFines(cloudFines || []);
         setExpenses(cloudExpenses || []);
-        if (cloudSettings && cloudSettings.length > 0) setSettings(cloudSettings[0] as any);
+        if (cloudSettings && cloudSettings.length > 0) {
+          const s = cloudSettings[0] as any;
+          setSettings({
+            ...s,
+            whatsapp_gestor: s.whatsapp_gestor || "82988883740",
+          });
+        }
       } else {
         // Fallback somente se offline / sem conexão com o Supabase
         if (typeof window !== "undefined") {
@@ -380,10 +402,19 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
         }
         
         if (inspections.length) await supabase.from("inspections").upsert(inspections);
-        if (maintenances.length) await supabase.from("maintenances").upsert(maintenances);
+        if (maintenances.length) {
+          const cloudSafeMaints = maintenances.map(m => {
+            const { categoria, forma_pagamento_responsavel, valor_aprovado, ...rest } = m;
+            return rest;
+          });
+          await supabase.from("maintenances").upsert(cloudSafeMaints);
+        }
         if (fines.length) await supabase.from("fines").upsert(fines);
         if (expenses.length) await supabase.from("expenses").upsert(expenses);
-        if (settings) await supabase.from("system_settings").upsert([settings]);
+        if (settings) {
+          const { whatsapp_gestor, ...cloudSafeSettings } = settings;
+          await supabase.from("system_settings").upsert([cloudSafeSettings]);
+        }
       } catch (err) {
         console.warn("Aviso ao sincronizar dados na nuvem:", err);
       }
@@ -1112,7 +1143,22 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
 
     try {
       const supabase = createClient();
-      await supabase.from("maintenances").insert([newMaint]);
+      // Sanitização estrita: apenas colunas reais que existem no Supabase
+      const cloudPayload = {
+        id: newMaint.id,
+        vehicle_id: newMaint.vehicle_id,
+        driver_id: newMaint.driver_id || null,
+        rule_id: newMaint.rule_id || null,
+        tipo_item: newMaint.tipo_item,
+        km_realizado: newMaint.km_realizado,
+        data_realizada: newMaint.data_realizada,
+        valor_custo: newMaint.valor_custo,
+        foto_nota_url: newMaint.foto_nota_url || null,
+        foto_odometro_url: newMaint.foto_odometro_url || null,
+        status: newMaint.status || "solicitado",
+        observacoes: `[${(newMaint.categoria || "corretiva").toUpperCase()} | ${(newMaint.forma_pagamento_responsavel || "desconto_aluguel").toUpperCase()}] ${newMaint.observacoes || ""}`.trim(),
+      };
+      await supabase.from("maintenances").insert([cloudPayload]);
     } catch (err) {
       console.warn("Aviso ao salvar manutenção no Supabase:", err);
     }
@@ -1124,7 +1170,8 @@ export function SevenDriveProvider({ children }: { children: React.ReactNode }) 
     );
     try {
       const supabase = createClient();
-      await supabase.from("maintenances").update(updates).eq("id", id);
+      const { categoria, forma_pagamento_responsavel, valor_aprovado, ...cleanUpdates } = updates as any;
+      await supabase.from("maintenances").update(cleanUpdates).eq("id", id);
     } catch (err) {
       console.warn("Aviso ao atualizar manutenção no Supabase:", err);
     }

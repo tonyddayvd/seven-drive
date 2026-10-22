@@ -27,6 +27,7 @@ export default function MotoristaPage() {
     vehicles,
     contracts,
     payments,
+    maintenances,
     activeAlerts,
     refreshDataFromCloud,
     resetPaymentIntention,
@@ -73,7 +74,17 @@ export default function MotoristaPage() {
       return new Date(a.data_vencimento).getTime() - new Date(b.data_vencimento).getTime();
     });
 
-  const currentPayment = rejectedPayment || openPayments[0] || driverPayments.sort((a, b) => new Date(b.data_vencimento).getTime() - new Date(a.data_vencimento).getTime())[0];
+  // Identifica a próxima semana se todas as anteriores estiverem confirmadas
+  const nextUnpaidPayment = driverPayments
+    .filter((p) => p.status !== "confirmado")
+    .sort((a, b) => new Date(a.data_vencimento).getTime() - new Date(b.data_vencimento).getTime())[0];
+
+  const currentPayment = rejectedPayment || openPayments[0] || nextUnpaidPayment;
+
+  // Manutenções enviadas pelo motorista aguardando aprovação
+  const pendingDriverMaintenances = maintenances.filter(
+    (m) => (m.vehicle_id === vehicle?.id || m.driver_id === activeDriver.id) && m.status === "solicitado"
+  );
 
   const vehicleAlerts = activeAlerts.filter((a) => a.vehicleId === vehicle?.id);
 
@@ -161,6 +172,36 @@ export default function MotoristaPage() {
             >
               Excluir
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Alerta de Manutenções Solicitadas em Análise */}
+      {pendingDriverMaintenances.length > 0 && (
+        <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/50 space-y-2 animate-fade-in">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-2 font-bold text-amber-400 text-xs uppercase tracking-wide">
+              <Clock className="w-4 h-4 animate-spin text-amber-400" />
+              Manutenção em Análise de Aprovação pelo Gestor ({pendingDriverMaintenances.length})
+            </span>
+            <Link href="/motorista/manutencao" className="text-[11px] text-amber-300 hover:underline font-semibold">
+              Ver detalhes &rarr;
+            </Link>
+          </div>
+          <div className="space-y-1.5">
+            {pendingDriverMaintenances.map((pm) => (
+              <div key={pm.id} className="flex items-center justify-between bg-zinc-900/80 p-2.5 rounded-xl border border-zinc-800 text-xs">
+                <div>
+                  <span className="font-bold text-white block">{pm.tipo_item}</span>
+                  <span className="text-[11px] text-zinc-400">
+                    Gasto: <strong className="text-emerald-400">{formatCurrency(pm.valor_custo)}</strong> • {pm.forma_pagamento_responsavel === "desconto_aluguel" ? "Solicitado desconto na fatura" : pm.forma_pagamento_responsavel === "reembolso" ? "Solicitado reembolso PIX" : "Pago pelo Locador"}
+                  </span>
+                </div>
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-bold">
+                  Em Análise
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -362,15 +403,20 @@ export default function MotoristaPage() {
       <div className="grid grid-cols-2 gap-4">
         <Link
           href="/motorista/manutencao"
-          className="bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 rounded-2xl p-5 transition flex flex-col justify-between"
+          className="bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 rounded-2xl p-5 transition flex flex-col justify-between relative"
         >
+          {pendingDriverMaintenances.length > 0 && (
+            <span className="absolute top-3 right-3 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] font-bold">
+              {pendingDriverMaintenances.length} em análise
+            </span>
+          )}
           <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center mb-3">
             <Wrench className="w-5 h-5" />
           </div>
           <div>
-            <h4 className="text-sm font-bold text-white">Enviar Revisão</h4>
+            <h4 className="text-sm font-bold text-white">Solicitar Manutenção</h4>
             <p className="text-[11px] text-zinc-400 mt-0.5">
-              Anexar nota fiscal de peças e odômetro
+              Revisão preventiva ou conserto do bolso
             </p>
           </div>
         </Link>
