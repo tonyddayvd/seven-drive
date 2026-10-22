@@ -37,51 +37,66 @@ export default function ManutencoesPage() {
   const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [approvalFeedback, setApprovalFeedback] = useState<string | null>(null);
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   // Solicitações pendentes de aprovação pelo Locador
   const pendingRequests = maintenances.filter((m) => m.status === "solicitado");
 
   const handleApproveMaintenance = async (m: typeof maintenances[0], action: "desconto" | "reembolso" | "aprovado") => {
-    if (action === "desconto") {
-      // Encontra a próxima parcela pendente de envio do mesmo motorista/veículo para abater o valor
-      const nextPayment = payments
-        .filter((p) => p.vehicle_id === m.vehicle_id && p.status === "pendente_envio")
-        .sort((a, b) => new Date(a.data_vencimento).getTime() - new Date(b.data_vencimento).getTime())[0];
+    // Trava de segurança: impede aprovação duplicada ou simultânea
+    if (processingId || m.status !== "solicitado") return;
+    setProcessingId(m.id);
 
-      if (nextPayment) {
-        const novoValor = Math.max(0, Number(nextPayment.valor) - Number(m.valor_custo));
-        await updatePayment(nextPayment.id, {
-          valor: novoValor,
-          observacao_admin: `Desconto aplicado de R$ ${Number(m.valor_custo).toFixed(2)} ref. à manutenção (${m.tipo_item}). Valor original anterior abatido.`
-        });
+    try {
+      if (action === "desconto") {
+        // Encontra a próxima parcela pendente de envio do mesmo motorista/veículo para abater o valor
+        const nextPayment = payments
+          .filter((p) => p.vehicle_id === m.vehicle_id && p.status === "pendente_envio")
+          .sort((a, b) => new Date(a.data_vencimento).getTime() - new Date(b.data_vencimento).getTime())[0];
+
+        if (nextPayment) {
+          const novoValor = Math.max(0, Number(nextPayment.valor) - Number(m.valor_custo));
+          await updatePayment(nextPayment.id, {
+            valor: novoValor,
+            observacao_admin: `Desconto aplicado de R$ ${Number(m.valor_custo).toFixed(2)} ref. à manutenção (${m.tipo_item}). Valor original anterior abatido.`
+          });
+          setApprovalFeedback(
+            `Manutenção aprovada! Valor de ${formatCurrency(m.valor_custo)} foi DESCONTADO da parcela com vencimento em ${formatDate(nextPayment.data_vencimento)} (Novo valor da parcela: ${formatCurrency(novoValor)}).`
+          );
+        } else {
+          setApprovalFeedback(
+            `Manutenção aprovada com desconto registrado. O locatário terá o abatimento de ${formatCurrency(m.valor_custo)} assim que a próxima semana for gerada.`
+          );
+        }
+      } else if (action === "reembolso") {
         setApprovalFeedback(
-          `Manutenção aprovada! Valor de ${formatCurrency(m.valor_custo)} foi DESCONTADO da parcela com vencimento em ${formatDate(nextPayment.data_vencimento)} (Novo valor da parcela: ${formatCurrency(novoValor)}).`
+          `Manutenção aprovada para REEMBOLSO! Favor realizar o envio do PIX no valor de ${formatCurrency(m.valor_custo)} diretamente para o motorista.`
         );
       } else {
-        setApprovalFeedback(
-          `Manutenção aprovada com desconto registrado. O locatário terá o abatimento de ${formatCurrency(m.valor_custo)} assim que a próxima semana for gerada.`
-        );
+        setApprovalFeedback(`Manutenção aprovada com sucesso!`);
       }
-    } else if (action === "reembolso") {
-      setApprovalFeedback(
-        `Manutenção aprovada para REEMBOLSO! Favor realizar o envio do PIX no valor de ${formatCurrency(m.valor_custo)} diretamente para o motorista.`
-      );
-    } else {
-      setApprovalFeedback(`Manutenção aprovada com sucesso!`);
+
+      await updateMaintenance(m.id, {
+        status: "aprovado",
+        valor_aprovado: m.valor_custo,
+      });
+
+      setTimeout(() => setApprovalFeedback(null), 8000);
+    } finally {
+      setProcessingId(null);
     }
-
-    await updateMaintenance(m.id, {
-      status: "aprovado",
-      valor_aprovado: m.valor_custo,
-    });
-
-    setTimeout(() => setApprovalFeedback(null), 8000);
   };
 
   const handleRejectMaintenance = async (m: typeof maintenances[0]) => {
-    await updateMaintenance(m.id, { status: "recusado" });
-    setApprovalFeedback(`Solicitação de manutenção ${m.tipo_item} foi recusada.`);
-    setTimeout(() => setApprovalFeedback(null), 5000);
+    if (processingId || m.status !== "solicitado") return;
+    setProcessingId(m.id);
+    try {
+      await updateMaintenance(m.id, { status: "recusado" });
+      setApprovalFeedback(`Solicitação de manutenção ${m.tipo_item} foi recusada.`);
+      setTimeout(() => setApprovalFeedback(null), 5000);
+    } finally {
+      setProcessingId(null);
+    }
   };
 
   // Form Rule State
@@ -340,22 +355,25 @@ export default function ManutencoesPage() {
                   <div className="pt-2 border-t border-zinc-800 flex flex-wrap gap-2">
                     <button
                       type="button"
+                      disabled={processingId === req.id}
                       onClick={() => handleApproveMaintenance(req, "desconto")}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] transition shadow-sm"
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-[11px] transition shadow-sm"
                     >
-                      Aprovar com Desconto no Aluguel
+                      {processingId === req.id ? "Processando..." : "Aprovar com Desconto no Aluguel"}
                     </button>
                     <button
                       type="button"
+                      disabled={processingId === req.id}
                       onClick={() => handleApproveMaintenance(req, "reembolso")}
-                      className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] transition shadow-sm"
+                      className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-[11px] transition shadow-sm"
                     >
-                      Aprovar Reembolso PIX
+                      {processingId === req.id ? "Processando..." : "Aprovar Reembolso PIX"}
                     </button>
                     <button
                       type="button"
+                      disabled={processingId === req.id}
                       onClick={() => handleRejectMaintenance(req)}
-                      className="px-3 py-1.5 rounded-lg bg-red-950 hover:bg-red-900 text-red-400 font-bold text-[11px] border border-red-800/80 transition"
+                      className="px-3 py-1.5 rounded-lg bg-red-950 hover:bg-red-900 disabled:opacity-50 text-red-400 font-bold text-[11px] border border-red-800/80 transition"
                     >
                       Recusar
                     </button>
