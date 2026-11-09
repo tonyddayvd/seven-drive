@@ -12,7 +12,9 @@ import {
   AlertCircle,
   FileText,
   Car,
+  Loader2,
 } from "lucide-react";
+import { compressImage } from "@/lib/image-compressor";
 
 export default function MotoristaManutencaoPage() {
   const router = useRouter();
@@ -38,22 +40,37 @@ export default function MotoristaManutencaoPage() {
   const [valorCusto, setValorCusto] = useState(250);
   const [fotoNotaUrl, setFotoNotaUrl] = useState("https://images.unsplash.com/photo-1584438784894-089d6a62b8fa?w=400&q=80");
   const [fotoOdometroUrl, setFotoOdometroUrl] = useState("https://images.unsplash.com/photo-1563720223185-11003d516935?w=400&q=80");
+  const [isCompressingNota, setIsCompressingNota] = useState(false);
+  const [isCompressingOdometro, setIsCompressingOdometro] = useState(false);
   const [observacoes, setObservacoes] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
   // Número do Gestor cadastrado no sistema (fallback para o telefone de Tony)
   const gestorPhone = (settings.whatsapp_gestor || "82988883740").replace(/\D/g, "");
 
-  const handleFileUpload = (setter: (url: string) => void, e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (
+    setter: (url: string) => void,
+    setLoading: (loading: boolean) => void,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setter(event.target.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
+      try {
+        setLoading(true);
+        const compressed = await compressImage(file, 1280, 1280, 0.75);
+        setter(compressed);
+      } catch (err) {
+        console.error("Erro ao compactar foto de manutenção:", err);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          if (event.target?.result) {
+            setter(event.target.result as string);
+          }
+        };
+        reader.readAsDataURL(file);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -301,15 +318,23 @@ export default function MotoristaManutencaoPage() {
               1. Foto da Nota Fiscal / Recibo
             </span>
             <div className="aspect-video rounded-lg overflow-hidden border border-zinc-700 bg-zinc-900 relative">
-              <img src={fotoNotaUrl} alt="Nota Fiscal" className="w-full h-full object-cover" />
+              {isCompressingNota ? (
+                <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-zinc-400">
+                  <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
+                  <span className="text-xs">Otimizando foto...</span>
+                </div>
+              ) : (
+                <img src={fotoNotaUrl} alt="Nota Fiscal" className="w-full h-full object-cover" />
+              )}
               <label className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 flex items-center justify-center cursor-pointer transition">
                 <span className="text-xs font-bold text-white bg-zinc-800 px-3 py-1.5 rounded-lg border border-zinc-600">
-                  Alterar Foto
+                  {isCompressingNota ? "Carregando..." : "Alterar Foto"}
                 </span>
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={(e) => handleFileUpload(setFotoNotaUrl, e)}
+                  disabled={isCompressingNota}
+                  onChange={(e) => handleFileUpload(setFotoNotaUrl, setIsCompressingNota, e)}
                   className="hidden"
                 />
               </label>
@@ -323,15 +348,23 @@ export default function MotoristaManutencaoPage() {
               2. Foto do Odômetro (Painel)
             </span>
             <div className="aspect-video rounded-lg overflow-hidden border border-zinc-700 bg-zinc-900 relative">
-              <img src={fotoOdometroUrl} alt="Odômetro" className="w-full h-full object-cover" />
+              {isCompressingOdometro ? (
+                <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-zinc-400">
+                  <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
+                  <span className="text-xs">Otimizando foto...</span>
+                </div>
+              ) : (
+                <img src={fotoOdometroUrl} alt="Odômetro" className="w-full h-full object-cover" />
+              )}
               <label className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 flex items-center justify-center cursor-pointer transition">
                 <span className="text-xs font-bold text-white bg-zinc-800 px-3 py-1.5 rounded-lg border border-zinc-600">
-                  Alterar Foto
+                  {isCompressingOdometro ? "Carregando..." : "Alterar Foto"}
                 </span>
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={(e) => handleFileUpload(setFotoOdometroUrl, e)}
+                  disabled={isCompressingOdometro}
+                  onChange={(e) => handleFileUpload(setFotoOdometroUrl, setIsCompressingOdometro, e)}
                   className="hidden"
                 />
               </label>

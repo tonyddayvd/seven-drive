@@ -16,6 +16,9 @@ import {
   Clock,
   X,
   Sparkles,
+  Trash2,
+  ZoomIn,
+  Eye,
 } from "lucide-react";
 
 export default function ManutencoesPage() {
@@ -30,6 +33,7 @@ export default function ManutencoesPage() {
     updateMaintenanceRule,
     addMaintenance,
     updateMaintenance,
+    deleteMaintenance,
     updatePayment,
     triggerBrowserNotification,
   } = useSevenDrive();
@@ -38,6 +42,7 @@ export default function ManutencoesPage() {
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [approvalFeedback, setApprovalFeedback] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [zoomImage, setZoomImage] = useState<{ url: string; title: string } | null>(null);
 
   // Solicitações pendentes de aprovação pelo Locador
   const pendingRequests = maintenances.filter((m) => m.status === "solicitado");
@@ -93,6 +98,21 @@ export default function ManutencoesPage() {
     try {
       await updateMaintenance(m.id, { status: "recusado" });
       setApprovalFeedback(`Solicitação de manutenção ${m.tipo_item} foi recusada.`);
+      setTimeout(() => setApprovalFeedback(null), 5000);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleDeleteMaintenance = async (m: typeof maintenances[0]) => {
+    if (!window.confirm(`Deseja realmente EXCLUIR definitivamente a solicitação de manutenção de ${formatCurrency(m.valor_custo)} (${m.tipo_item})?`)) {
+      return;
+    }
+    if (processingId) return;
+    setProcessingId(m.id);
+    try {
+      await deleteMaintenance(m.id);
+      setApprovalFeedback(`Solicitação de manutenção ${m.tipo_item} excluída com sucesso!`);
       setTimeout(() => setApprovalFeedback(null), 5000);
     } finally {
       setProcessingId(null);
@@ -331,24 +351,34 @@ export default function ManutencoesPage() {
 
                   <div className="flex items-center gap-2 pt-1">
                     {req.foto_nota_url && (
-                      <a
-                        href={req.foto_nota_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-blue-400 font-semibold border border-zinc-700 text-[11px]"
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setZoomImage({
+                            url: req.foto_nota_url!,
+                            title: `Nota Fiscal - ${req.tipo_item} (${formatCurrency(req.valor_custo)})`,
+                          })
+                        }
+                        className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-blue-400 font-semibold border border-zinc-700 text-[11px] flex items-center gap-1.5 transition"
                       >
+                        <Eye className="w-3.5 h-3.5" />
                         Ver Nota Fiscal
-                      </a>
+                      </button>
                     )}
                     {req.foto_odometro_url && (
-                      <a
-                        href={req.foto_odometro_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-400 font-semibold border border-zinc-700 text-[11px]"
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setZoomImage({
+                            url: req.foto_odometro_url!,
+                            title: `Odômetro - ${formatKM(req.km_realizado)}`,
+                          })
+                        }
+                        className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-400 font-semibold border border-zinc-700 text-[11px] flex items-center gap-1.5 transition"
                       >
+                        <Eye className="w-3.5 h-3.5" />
                         Foto Odômetro
-                      </a>
+                      </button>
                     )}
                   </div>
 
@@ -376,6 +406,16 @@ export default function ManutencoesPage() {
                       className="px-3 py-1.5 rounded-lg bg-red-950 hover:bg-red-900 disabled:opacity-50 text-red-400 font-bold text-[11px] border border-red-800/80 transition"
                     >
                       Recusar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={processingId === req.id}
+                      onClick={() => handleDeleteMaintenance(req)}
+                      className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-red-950 text-zinc-400 hover:text-red-400 font-bold text-[11px] border border-zinc-700 hover:border-red-800 transition flex items-center gap-1"
+                      title="Excluir do sistema"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Excluir
                     </button>
                   </div>
                 </div>
@@ -463,24 +503,34 @@ export default function ManutencoesPage() {
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
                         {m.foto_nota_url && (
-                          <a
-                            href={m.foto_nota_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-blue-400 text-[11px] border border-zinc-700"
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setZoomImage({
+                                url: m.foto_nota_url!,
+                                title: `Nota Fiscal - ${m.tipo_item} (${formatCurrency(m.valor_custo)})`,
+                              })
+                            }
+                            className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-blue-400 text-[11px] border border-zinc-700 flex items-center gap-1 transition"
                           >
+                            <Eye className="w-3 h-3" />
                             Ver Nota Fiscal
-                          </a>
+                          </button>
                         )}
                         {m.foto_odometro_url && (
-                          <a
-                            href={m.foto_odometro_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-amber-400 text-[11px] border border-zinc-700"
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setZoomImage({
+                                url: m.foto_odometro_url!,
+                                title: `Odômetro - ${formatKM(m.km_realizado)}`,
+                              })
+                            }
+                            className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-amber-400 text-[11px] border border-zinc-700 flex items-center gap-1 transition"
                           >
+                            <Eye className="w-3 h-3" />
                             Foto Odômetro
-                          </a>
+                          </button>
                         )}
                       </div>
                     </td>
@@ -659,6 +709,34 @@ export default function ManutencoesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE ZOOM DE IMAGEM (NOTA FISCAL / ODÔMETRO) */}
+      {zoomImage && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between p-4 border-b border-zinc-800">
+              <span className="text-xs font-bold text-white flex items-center gap-2">
+                <ZoomIn className="w-4 h-4 text-blue-400" />
+                {zoomImage.title}
+              </span>
+              <button
+                type="button"
+                onClick={() => setZoomImage(null)}
+                className="p-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-black/60">
+              <img
+                src={zoomImage.url}
+                alt={zoomImage.title}
+                className="max-h-[75vh] w-auto object-contain rounded-lg shadow-2xl"
+              />
+            </div>
           </div>
         </div>
       )}
