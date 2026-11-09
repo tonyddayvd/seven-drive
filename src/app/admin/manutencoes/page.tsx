@@ -19,6 +19,7 @@ import {
   Trash2,
   ZoomIn,
   Eye,
+  RefreshCw,
 } from "lucide-react";
 
 export default function ManutencoesPage() {
@@ -36,6 +37,7 @@ export default function ManutencoesPage() {
     deleteMaintenance,
     updatePayment,
     triggerBrowserNotification,
+    refreshDataFromCloud,
   } = useSevenDrive();
 
   const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
@@ -43,9 +45,19 @@ export default function ManutencoesPage() {
   const [approvalFeedback, setApprovalFeedback] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [zoomImage, setZoomImage] = useState<{ url: string; title: string } | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Solicitações pendentes de aprovação pelo Locador
   const pendingRequests = maintenances.filter((m) => m.status === "solicitado");
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshDataFromCloud();
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 600);
+    }
+  };
 
   const handleApproveMaintenance = async (m: typeof maintenances[0], action: "desconto" | "reembolso" | "aprovado") => {
     // Trava de segurança: impede aprovação duplicada ou simultânea
@@ -177,7 +189,16 @@ export default function ManutencoesPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-200 border border-zinc-700 transition shadow-sm"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-blue-400" : "text-zinc-400"}`} />
+            <span>{isRefreshing ? "Sincronizando..." : "Sincronizar Nuvem"}</span>
+          </button>
           <button
             onClick={() => setIsRuleModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs border border-zinc-700 transition"
@@ -292,7 +313,7 @@ export default function ManutencoesPage() {
       )}
 
       {/* Solicitações de Manutenção do Motorista Pendentes de Aprovação */}
-      {pendingRequests.length > 0 && (
+      {pendingRequests.length > 0 ? (
         <div className="bg-zinc-900 border-2 border-amber-500/60 rounded-2xl p-6 space-y-4 shadow-xl shadow-amber-950/20 animate-fade-in">
           <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
             <div>
@@ -422,6 +443,22 @@ export default function ManutencoesPage() {
               );
             })}
           </div>
+        </div>
+      ) : (
+        <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-5 flex items-center justify-between text-xs text-zinc-400">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>Nenhuma solicitação de manutenção pendente de aprovação no momento.</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold border border-zinc-700"
+          >
+            <RefreshCw className={`w-3 h-3 ${isRefreshing ? "animate-spin" : ""}`} />
+            <span>Atualizar</span>
+          </button>
         </div>
       )}
 
