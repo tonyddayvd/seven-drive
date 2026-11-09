@@ -12,6 +12,8 @@ import {
   Car,
   AlertTriangle,
   ZoomIn,
+  ZoomOut,
+  RotateCcw,
   Check,
   ArrowRight,
   RefreshCw,
@@ -48,6 +50,7 @@ export default function ConferenciaPage() {
 
   // Modal de Zoom de Imagem em Alta Resolução
   const [zoomImage, setZoomImage] = useState<{ url: string; title: string } | null>(null);
+  const [zoomScale, setZoomScale] = useState<number>(1);
 
   // Polling automático da nuvem a cada 12 segundos para manter a fila sempre atualizada
   useEffect(() => {
@@ -478,30 +481,78 @@ export default function ConferenciaPage() {
 
       {/* MODAL DE ZOOM DE IMAGEM */}
       {zoomImage && (
-        <div
-          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
-          onClick={() => setZoomImage(null)}
-        >
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-2 sm:p-4">
           <div
-            className="relative max-w-4xl w-full max-h-[90vh] flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden"
+            className="relative max-w-5xl w-full h-[92vh] flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950">
-              <span className="text-xs font-bold text-white">{zoomImage.title}</span>
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3 sm:p-4 border-b border-zinc-800 bg-zinc-950">
+              <span className="text-xs font-bold text-white flex items-center gap-2 truncate max-w-[200px] sm:max-w-md">
+                <ZoomIn className="w-4 h-4 text-blue-400 shrink-0" />
+                {zoomImage.title}
+              </span>
+
+              {/* Controles de Zoom In, Zoom Out e Reset */}
+              <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded-xl p-1">
+                <button
+                  type="button"
+                  onClick={() => setZoomScale((prev) => Math.max(0.5, prev - 0.25))}
+                  className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition"
+                  title="Diminuir zoom (-)"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+                <span className="text-[11px] font-mono font-bold text-blue-400 min-w-[45px] text-center">
+                  {Math.round(zoomScale * 100)}%
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setZoomScale((prev) => Math.min(3.5, prev + 0.25))}
+                  className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition"
+                  title="Aumentar zoom (+)"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoomScale(1)}
+                  className="px-2 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-[11px] font-semibold flex items-center gap-1 transition"
+                  title="Redefinir tamanho normal"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">100%</span>
+                </button>
+              </div>
+
               <button
                 type="button"
-                onClick={() => setZoomImage(null)}
-                className="p-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition"
+                onClick={() => {
+                  setZoomImage(null);
+                  setZoomScale(1);
+                }}
+                className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition"
+                title="Fechar (ESC)"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-black/60">
-              <img
-                src={zoomImage.url}
-                alt={zoomImage.title}
-                className="max-h-[75vh] w-auto object-contain rounded-lg shadow-2xl"
-              />
+
+            <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-black/70 cursor-grab active:cursor-grabbing select-none">
+              <div
+                style={{
+                  transform: `scale(${zoomScale})`,
+                  transformOrigin: "center center",
+                  transition: "transform 0.15s ease-out",
+                }}
+                className="max-w-full max-h-full flex items-center justify-center"
+              >
+                <img
+                  src={zoomImage.url}
+                  alt={zoomImage.title}
+                  draggable={false}
+                  className="max-h-[75vh] w-auto object-contain rounded-lg shadow-2xl"
+                />
+              </div>
             </div>
           </div>
         </div>
